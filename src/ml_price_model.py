@@ -58,58 +58,124 @@ Expected ML training schema (one row per price observation):
 # Synthetic data generation (dev / testing only)
 # -----------------------------------------------------------------------------
 
-
-def make_synthetic_training_data(n_rows: int = 500) -> pd.DataFrame:
+def make_synthetic_training_data(n_rows: int = 2000) -> pd.DataFrame:
     """
-    Create a small synthetic dataset that follows the ML schema shape.
-    This is only for development and plumbing; real training will use actual
-    historical fare data in the same column format.
+    Create a synthetic dataset that has structured relationships between features
+    and the probability of a future price drop.
+
+    Intuition:
+      - Each route has a base fare
+      - Each airline and region add a markup factor
+      - Farther from departure -> higher markup (more room to drop later)
+      - "Future min price" is close to the base fare with some volatility
+      - Current price = future min + markup
+      - Label is derived from whether future_min_price_usd is at least
+        DROP_THRESHOLD_PCT below current_price_usd.
     """
     rng = np.random.default_rng(42)
 
-    origins = ["SJU", "JFK", "MCO", "MIA"]
-    destinations = ["JFK", "SJU", "MCO", "LAX"]
+    # Define some routes with different base fares
+    route_base_fares = {
+        ("SJU", "JFK"): 320,
+        ("SJU", "MCO"): 200,
+        ("SJU", "MIA"): 190,
+        ("SJU", "LAX"): 480,
+        ("JFK", "SJU"): 320,
+        ("MCO", "SJU"): 210,
+        ("MIA", "SJU"): 195,
+    }
+
+    origins = list({r[0] for r in route_base_fares.keys()})
+    destinations = list({r[1] for r in route_base_fares.keys()})
+
     airlines = ["JetBlue", "American", "Delta", "Spirit", "United"]
+    # Airline-specific markup factors (e.g. legacy vs low-cost carriers)
+    airline_markup = {
+        "JetBlue": 1.03,
+        "American": 1.07,
+        "Delta": 1.08,
+        "United": 1.05,
+        "Spirit": 0.98,
+    }
+
     regions = ["US", "EU", "LATAM"]
+    region_markup = {
+        "US": 1.08,
+        "EU": 1.02,
+        "LATAM": 0.98,
+    }
 
     today = date.today()
 
     rows = []
     for _ in range(n_rows):
+        # Route and carrier
         origin = rng.choice(origins)
-        destination = rng.choice(destinations)
+        # ensure we pick a valid destination for this origin
+        valid_dests = [d for (o, d) in route_base_fares.keys() if o == origin]
+        destination = rng.choice(valid_dests)
         airline = rng.choice(airlines)
         region = rng.choice(regions)
 
-        # Sample a departure 3–90 days from "today"
-        days_until_dep = int(rng.integers(3, 91))
+        base_fare = route_base_fares.get((origin, destination), 280)
+
+        # Time dimension
+        days_until_dep = int(rng.integers(3, 91))  # 3 to 90 days out
         departure_date = today.toordinal() + days_until_dep
         departure_date = date.fromordinal(departure_date)
 
-        # Sample a search_date that is before departure (0–20 days earlier)
-        days_before_search = int(rng.integers(0, 21))
+        # Pick search date a small number of days before departure
+        days_before_search = int(rng.integers(0, min(21, days_until_dep)))
         search_date = departure_date.toordinal() - days_before_search
         search_date = date.fromordinal(search_date)
 
-        # Base price roughly depends on route distance / randomness
-        base_price = rng.normal(300, 80)
-        base_price = max(base_price, 80)  # clamp to something reasonable
-
-        # Add some uplift for long-haul routes (very rough)
+        # Volatility: long-haul routes and EU region can be slightly more volatile
+        route_volatility = 1.0
         if destination in ("LAX",):
-            base_price += 150
+            route_volatility += 0.3
+        if region == "EU":
+            route_volatility += 0.1
 
-        # current price with small noise
-        current_price = float(base_price + rng.normal(0, 30))
+        # Simulate future min price around the base fare
+        future_min_price = base_fare * \
+            (1 + rng.normal(0, 0.12) * route_volatility)
 
-        # Simulate future_min_price as current price plus some movement
-        movement = rng.normal(0, 40)  # price can go up or down
-        future_min_price = current_price + movement
-
-        # enforce some realism
         future_min_price = max(future_min_price, 50.0)
 
-        price_drops = int(future_min_price <= current_price * (1 - DROP_THRESHOLD_PCT))
+        # Markup is larger:
+        #  - when days_until_dep is large (booking very early)
+        #  - for expensive airlines (legacy carriers)
+        #  - in US region vs others
+        time_markup_factor = 1 + 0.4 * (days_until_dep / 90.0)  # up to +40%
+        carrier_factor = airline_markup[airline]
+        region_factor = region_markup[region]
+
+        # Random residual markup
+        residual = rng.normal(0, 0.03)  # ±3% noise
+
+        total_markup_multiplier = time_markup_factor * carrier_factor * region_factor
+        total_markup_multiplier *= (1 + residual)
+
+        current_price = future_min_price * total_markup_multiplier
+
+        # Clamp to reasonable range
+        current_price = max(current_price, 60.0)
+
+        # Label: did price drop by at least DROP_THRESHOLD_PCT?
+        # Compute a probability of price drop using a logistic-style weighting
+        p = (
+            # more days → higher drop chance
+            0.50 * (days_until_dep / 90)
+            # expensive airlines → higher drop chance
+            + 0.25 * (airline_markup[airline] - 1.0)
+            # small region influence
+            + 0.10 * (region_markup[region] - 1.0)
+            + 0.15 * rng.normal(0, 0.2)                    # reduced noise
+        )
+
+        # squash to 0–1 (sigmoid-like)
+        p = 1 / (1 + np.exp(-p))
+        price_drops = int(rng.random() < p)
 
         rows.append(
             {
@@ -120,8 +186,8 @@ def make_synthetic_training_data(n_rows: int = 500) -> pd.DataFrame:
                 "departure_date": departure_date,
                 "search_date": search_date,
                 "days_until_departure": days_until_dep,
-                "current_price_usd": current_price,
-                "future_min_price_usd": future_min_price,
+                "current_price_usd": float(current_price),
+                "future_min_price_usd": float(future_min_price),
                 "price_drops": price_drops,
             }
         )
@@ -186,7 +252,6 @@ def train_baseline_model(df: pd.DataFrame) -> Pipeline:
 
     model.fit(X, y)
     return model
-
 
 # -----------------------------------------------------------------------------
 # Inference helper

@@ -3,6 +3,8 @@ import pandas as pd
 from datetime import date, timedelta
 from data_access import load_flight_offers
 from datetime import date, timedelta
+import joblib
+from ml_price_model import predict_price_drop_probability
 from engine import (
     generate_dummy_offers,
     pick_best_offers,
@@ -14,6 +16,22 @@ st.set_page_config(
     page_title="Airfare Marketplace",
     layout="wide",
 )
+
+
+@st.cache_resource
+def load_price_drop_model():
+    """
+    Load the trained price-drop model from disk.
+    Returns None if the model file is missing or fails to load.
+    """
+    try:
+        return joblib.load("models/price_drop_model.pkl")
+    except Exception:
+        return None
+
+
+price_model = load_price_drop_model()
+
 
 st.title("✈️ Airfare Marketplace (MVP)")
 st.write("Price-drop predictions and smart recommendations — coming soon.")
@@ -179,6 +197,34 @@ if search_clicked:
                     value=stops_text,
                     help=f"Internal score: {recommended.get('score', 0):.1f} (lower is better)",
                 )
+        # --- ML price-drop probability for the recommended option ---
+        if recommended and price_model is not None:
+            try:
+                prob_drop = predict_price_drop_probability(
+                    price_model,
+                    recommended,
+                    search_date=date.today(),
+                )
+
+                st.metric(
+                    label="Chance of price drop (next 7 days)",
+                    value=f"{prob_drop:.0%}",
+                    help="Experimental ML estimate from a Random Forest model trained on synthetic data.",
+                )
+
+                # Simple buy / wait suggestion
+                if prob_drop >= 0.65:
+                    suggestion = "High chance of drop → it may be worth waiting."
+                elif prob_drop <= 0.35:
+                    suggestion = "Low chance of drop → leaning toward buying now."
+                else:
+                    suggestion = "Uncertain zone → consider monitoring or setting alerts."
+
+                st.caption(f"ML suggestion: {suggestion}")
+            except Exception:
+                st.caption("ML price-drop model is available but failed for this offer.")
+        elif recommended and price_model is None:
+            st.caption("Price-drop model not loaded. (models/price_drop_model.pkl missing?)")
 
         st.markdown("---")
 
