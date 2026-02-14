@@ -1,8 +1,8 @@
 import os
 import pandas as pd
-from datetime import date
 from typing import Dict, Any, List
 from datetime import date, timedelta
+from pathlib import Path
 
 DATA_PATH = os.path.join(os.path.dirname(
     os.path.dirname(__file__)), "data", "sample_flights.csv")
@@ -75,3 +75,36 @@ def load_flight_offers(search_params: Dict[str, Any]) -> pd.DataFrame:
         ]
 
     return df
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent  # src/.. -> project root
+HISTORY_PATH = BASE_DIR / "data" / "price_history.csv"
+
+
+def load_price_history() -> pd.DataFrame:
+    df = pd.read_csv(HISTORY_PATH)
+
+    # adjust column names to match your CSV
+    df["departure_date"] = pd.to_datetime(
+        df["departure_date"],
+        format="%Y-%m-%d",
+        errors="coerce",
+    )
+    df["search_datetime"] = pd.to_datetime(
+        df["search_datetime"],
+        errors="coerce",
+    )
+    return df
+
+
+def get_route_history(origin: str, destination: str, departure_date) -> pd.DataFrame:
+    df = load_price_history()
+
+    query_date = pd.to_datetime(departure_date)
+
+    mask = (
+        (df["origin"] == origin)
+        & (df["destination"] == destination)
+        & (df["departure_date"] == query_date)
+    )
+    return df[mask].copy()

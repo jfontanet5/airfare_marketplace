@@ -16,5 +16,8 @@ env/
 # macOS
 .DS_Store
 
+# Environment variables (secrets)
+.env
+
 # Data (local only)
 data/
