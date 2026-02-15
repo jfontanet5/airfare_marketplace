@@ -10,7 +10,7 @@ from core.scoring import (
 )
 from core.models import SearchParams
 from ml_price_model import predict_price_drop_probability
-from data_access import get_route_history
+from sqlite_history_store import SqlitePriceHistoryStore
 from datetime import date, timedelta
 import joblib
 import pandas as pd
@@ -51,6 +51,13 @@ def load_price_drop_model():
     except Exception:
         return None
 
+
+@st.cache_resource
+def get_history_store():
+    return SqlitePriceHistoryStore()
+
+
+history_store = get_history_store()
 
 price_model = load_price_drop_model()
 
@@ -218,6 +225,24 @@ if search_clicked:
         st.warning("No offers found for this search.")
         st.stop()
 
+    # ---- Log observations to SQLite history store (Phase 3) ----
+    try:
+        history_store.append_offers(
+            offers_objects,
+            origin=params_obj.origin,
+            destination=params_obj.destination,
+            trip_structure=params_obj.trip_structure,
+            departure_date=params_obj.departure_date,
+            return_date=params_obj.return_date,
+            passengers=int(params_obj.passengers),
+            max_stops_label=params_obj.max_stops,
+            flexible_dates=bool(params_obj.flexible_dates),
+            top_n=30,  # keep volume reasonable
+        )
+    except Exception:
+        # We do not want history logging failures to break the app
+        pass
+
     # ---- Object scoring / recommendation ----
     scored = score_offers(offers_objects, params_obj)
     recommended_scored = pick_recommended(scored)
@@ -316,19 +341,44 @@ if search_clicked:
                 "Price-drop model not loaded. (models/price_drop_model.pkl missing?)")
 
         # --- Price history chart (based on stored observations) ---
-        hist_df = get_route_history(
+        hist_df = history_store.get_market_trend(
             origin.upper(), destination.upper(), departure_date)
 
         if not hist_df.empty:
-            st.subheader("📉 Historical prices (last recorded observations)")
-            hist_df_chart = (
-                hist_df[["search_datetime", "price_usd"]]
-                .sort_values("search_datetime")
-                .set_index("search_datetime")
+            st.subheader("📉 Market trend (daily lowest observed price)")
+
+            # Prep
+            hist_df = hist_df.copy()
+            hist_df["search_day"] = pd.to_datetime(hist_df["search_day"])
+            hist_df = hist_df.sort_values("search_day")
+
+            # Trend lines
+            hist_df["rolling_7d_avg"] = hist_df["min_price_usd"].rolling(
+                window=7, min_periods=1).mean()
+            hist_df["best_so_far"] = hist_df["min_price_usd"].cummin()
+
+            chart_df = (
+                hist_df[["search_day", "min_price_usd",
+                         "rolling_7d_avg", "best_so_far"]]
+                .set_index("search_day")
+                .rename(
+                    columns={
+                        "min_price_usd": "Daily min (USD)",
+                        "rolling_7d_avg": "7-day avg (USD)",
+                        "best_so_far": "Best so far (USD)",
+                    }
+                )
             )
-            st.line_chart(hist_df_chart)
-        else:
-            st.info("No historical price data available for this route yet.")
+
+            st.line_chart(chart_df)
+
+            # Optional small stats line
+            latest = float(hist_df["min_price_usd"].iloc[-1])
+            best = float(hist_df["min_price_usd"].min())
+            st.caption(
+                f"Latest daily min: ${latest:,.0f} · Best recorded: ${best:,.0f}")
+    else:
+        st.info("No historical price data available for this route yet.")
 
         # Debug
         with st.expander("🔍 Debug: recommended offer (optional)"):
