@@ -21,3 +21,5 @@ env/
 
 # Data (local only)
 data/
+data/price_history.sqlite
+
