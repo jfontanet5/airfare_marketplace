@@ -1,21 +1,21 @@
+from airports_service import get_airports_df, iata_from_label
+from providers.amadeus_provider import AmadeusProvider
+from providers.csv_provider import CSVProvider
+from providers.mock_provider import MockProvider
+from core.scoring import (
+    score_offers,
+    pick_recommended,
+    pick_best_by_price,
+    format_offer_label,
+)
+from core.models import SearchParams
+from ml_price_model import predict_price_drop_probability
+from data_access import get_route_history
 from datetime import date, timedelta
 import joblib
 import pandas as pd
 import streamlit as st
-from data_access import load_flight_offers, get_route_history
-from ml_price_model import predict_price_drop_probability
-from core.models import SearchParams
-from providers.mock_provider import MockProvider
-from providers.csv_provider import CSVProvider
-from services.offer_bridge import offers_to_legacy_dicts
-from providers.amadeus_provider import AmadeusProvider
-from airports_service import get_airports_df, iata_from_label
-from engine import (
-    generate_dummy_offers,
-    pick_best_offers,
-    pick_recommended_offer,
-    format_offer_label,
-)
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -24,6 +24,20 @@ st.set_page_config(
     page_title="Airfare Marketplace",
     layout="wide",
 )
+
+
+def fmt_time_ampm(dt):
+    """
+    Format a datetime as 'h:mm AM/PM'. Returns 'N/A' if dt is None.
+    Works cross-platform (Windows/macOS/Linux).
+    """
+    if not dt:
+        return "N/A"
+    try:
+        # Windows doesn't support %-I
+        return dt.strftime("%#I:%M %p")
+    except Exception:
+        return dt.strftime("%I:%M %p").lstrip("0")
 
 
 @st.cache_resource
@@ -57,17 +71,15 @@ with st.sidebar:
     airports_df = get_airports_df(force_refresh=False).copy()
 
     # Create an internal option string that includes a lowercase key so "sju" matches "SJU"
-    # We keep the displayed label clean via format_func.
     airports_df["option"] = airports_df["label"] + \
         "  |  " + airports_df["label"].str.lower()
-
     options = airports_df["option"].tolist()
 
     origin_option = st.selectbox(
         "Departing from",
         options=options,
         index=None,
-        format_func=lambda x: x.split("  |  ")[0],  # show only the clean label
+        format_func=lambda x: x.split("  |  ")[0],
         placeholder="Type airport/city (e.g., sju, San Juan, JFK, New York)...",
     )
 
@@ -79,7 +91,6 @@ with st.sidebar:
         placeholder="Type airport/city (e.g., sju, San Juan, JFK, New York)...",
     )
 
-    # Extract clean label (left side) and then IATA
     origin_label = origin_option.split("  |  ")[0] if origin_option else None
     destination_label = destination_option.split(
         "  |  ")[0] if destination_option else None
@@ -92,7 +103,7 @@ with st.sidebar:
     departure_date = st.date_input(
         "Departure date",
         value=today,
-        min_value=today,  # don't allow past dates
+        min_value=today,
     )
 
     return_date = None
@@ -100,10 +111,9 @@ with st.sidebar:
         return_date = st.date_input(
             "Return date",
             value=departure_date + timedelta(days=3),
-            min_value=departure_date,  # can't be before departure
+            min_value=departure_date,
         )
 
-    # How the engine should search
     optimize_cheapest = st.checkbox(
         "Optimal mode (cheapest combinations)",
         value=True,
@@ -114,15 +124,12 @@ with st.sidebar:
             "(e.g., classic roundtrip, same carrier)."
         ),
     )
-
-    # Map checkbox into a simple mode string
     optimization_mode = "Optimal" if optimize_cheapest else "Traditional"
 
     passengers = st.number_input("Passengers", min_value=1, value=1, step=1)
 
     st.markdown("---")
 
-    # Filters / options
     max_stops = st.selectbox(
         "Max stops",
         options=["Nonstop only", "Up to 1 stop", "Up to 2+ stops"],
@@ -147,12 +154,8 @@ with st.sidebar:
     use_real_data = (data_source == "CSV (local)")
     use_live_amadeus = (data_source == "Amadeus (live, limited)")
 
-    ready_to_search = (
-        bool(origin)
-        and bool(destination)
-        and origin != destination
-    )
-
+    ready_to_search = bool(origin) and bool(
+        destination) and origin != destination
     search_clicked = st.button("Search", disabled=not ready_to_search)
 
     if not ready_to_search:
@@ -211,18 +214,18 @@ if search_clicked:
         st.error(f"Failed to fetch offers: {e}")
         st.stop()
 
-    # Bridge Offer objects -> legacy dicts (for existing engine/scoring code)
-    offers = offers_to_legacy_dicts(offers_objects)
-
-    if not offers:
+    if not offers_objects:
         st.warning("No offers found for this search.")
         st.stop()
 
-    # ---- Existing logic continues below ----
-    best_global, best_us = pick_best_offers(offers)
-    recommended = pick_recommended_offer(offers, engine_params)
+    # ---- Object scoring / recommendation ----
+    scored = score_offers(offers_objects, params_obj)
+    recommended_scored = pick_recommended(scored)
+    recommended_offer = recommended_scored.offer if recommended_scored else None
 
-    if engine_params["flexible_dates"]:
+    best_global = pick_best_by_price(offers_objects)
+
+    if params_obj.flexible_dates:
         st.markdown(
             "🗓️ **Flexible dates enabled:** showing results for a ±3 day window "
             "around your selected departure (and return, if roundtrip)."
@@ -230,42 +233,76 @@ if search_clicked:
 
     # ⭐ Recommended option card
     st.markdown("### ⭐ Recommended option (balanced score)")
-    if recommended:
+    if recommended_offer:
         col_r1, col_r2, col_r3 = st.columns(3)
+
+        first_seg = None
+        if recommended_offer.itineraries and recommended_offer.itineraries[0].segments:
+            first_seg = recommended_offer.itineraries[0].segments[0]
+
         with col_r1:
-            st.write(format_offer_label(recommended))
+            st.write(format_offer_label(recommended_offer))
+
             st.caption(
-                f"Departure: {recommended.get('departure_date', 'N/A')}"
+                f"Departure date: {recommended_offer.departure_date}"
                 + (
-                    f" · Return: {recommended.get('return_date')}"
-                    if engine_params["trip_structure"] == "Roundtrip"
+                    f" · Return date: {recommended_offer.return_date}"
+                    if recommended_offer.trip_structure == "Roundtrip" and recommended_offer.return_date
                     else ""
                 )
             )
+
+            if first_seg:
+                carrier_display = first_seg.carrier_name or first_seg.carrier_code or ""
+                flight_display = f"{carrier_display} {first_seg.flight_number or ''}".strip(
+                )
+                dep_display = fmt_time_ampm(first_seg.dep_at)
+                arr_display = fmt_time_ampm(first_seg.arr_at)
+                st.caption(
+                    f"Flight: {flight_display} · Dep: {dep_display} · Arr: {arr_display}")
+
         with col_r2:
             st.metric(
                 label="Estimated total price",
-                value=f"${recommended['total_price_usd']:.0f} USD",
+                value=f"${recommended_offer.total_price_usd:.0f} USD",
             )
+
         with col_r3:
-            stops_out = recommended.get("stops_out") or 0
-            stops_ret = recommended.get("stops_return") or 0
-            if engine_params["trip_structure"] == "One-way":
+            stops_out = recommended_offer.stops_out or 0
+            stops_ret = recommended_offer.stops_return or 0
+
+            if recommended_offer.trip_structure == "One-way":
                 stops_text = f"{stops_out} stop(s) outbound"
             else:
                 stops_text = f"{stops_out} stop(s) out · {stops_ret} stop(s) return"
+
             st.metric(
                 label="Route quality",
                 value=stops_text,
-                help=f"Internal score: {recommended.get('score', 0):.1f} (lower is better)",
+                help=(
+                    f"Internal score: {recommended_scored.score:.1f} (lower is better)"
+                    if recommended_scored is not None
+                    else "Internal score: N/A"
+                ),
             )
 
-        # --- ML price-drop probability for the recommended option ---
+        # --- ML price-drop probability (TEMP shim: ML expects dict) ---
         if price_model is not None:
             try:
+                legacy_for_ml = {
+                    "airline": recommended_offer.airline,
+                    "total_price_usd": recommended_offer.total_price_usd,
+                    "stops_out": recommended_offer.stops_out,
+                    "stops_return": recommended_offer.stops_return,
+                    "trip_structure": recommended_offer.trip_structure,
+                    "departure_date": str(recommended_offer.departure_date),
+                    "return_date": str(recommended_offer.return_date) if recommended_offer.return_date else None,
+                    "region": "US",  # TEMP legacy expectation; will remove in ML migration
+                }
+
                 prob_drop = predict_price_drop_probability(
                     price_model,
-                    recommended,
+                    legacy_for_ml,
                     search_date=date.today(),
                 )
 
@@ -305,13 +342,13 @@ if search_clicked:
         else:
             st.info("No historical price data available for this route yet.")
 
-        # Optional: show raw dict for the recommended offer only
+        # Debug
         with st.expander("🔍 Debug: recommended offer (optional)"):
-            st.json(recommended)
+            st.json(recommended_offer.raw if recommended_offer.raw else {})
 
     st.markdown("---")
 
-    # 🌍 / 🇺🇸 summary cards (price-only)
+    # 🌍 summary card (price-only)
     col1, col2 = st.columns(2)
 
     with col1:
@@ -319,53 +356,57 @@ if search_clicked:
         if best_global:
             st.metric(
                 label=format_offer_label(best_global),
-                value=f"${best_global['total_price_usd']:.0f} USD",
-                help=f"Provider: {best_global.get('provider', 'N/A')}",
+                value=f"${best_global.total_price_usd:.0f} USD",
+                help=f"Provider: {best_global.provider}",
             )
         else:
-            st.info("No global offers found.")
+            st.info("No offers found.")
 
     with col2:
-        st.markdown("### 🇺🇸 Best US-region fare (by price)")
-        if best_us:
-            st.metric(
-                label=format_offer_label(best_us),
-                value=f"${best_us['total_price_usd']:.0f} USD",
-                help=f"Provider: {best_us.get('provider', 'N/A')}",
-            )
-        else:
-            st.info("No US-region offers in this dataset.")
+        st.markdown("### 🇺🇸 Best US-region fare (legacy concept)")
+        st.info(
+            "Region-based selection has been removed in Phase 3 (it was synthetic/injected).")
 
-    # Full offer table (only relevant columns)
+    # Full offer table (object-based)
     st.subheader("Candidate itineraries")
-    results_df = pd.DataFrame(offers)
 
-    preferred_cols = [
-        "provider",
-        "region",
-        "origin",
-        "destination",
-        "trip_structure",
-        "departure_date",
-        "return_date",
-        "airline",
-        "stops_out",
-        "stops_return",
-        "total_price_usd",
-        "currency",
-        "score",
-    ]
-    display_cols = [c for c in preferred_cols if c in results_df.columns]
+    rows = []
+    for s in scored:
+        o = s.offer
+        first_seg = None
+        if o.itineraries and o.itineraries[0].segments:
+            first_seg = o.itineraries[0].segments[0]
 
-    if display_cols:
-        if "total_price_usd" in results_df.columns:
-            results_df = results_df.sort_values(
-                by=["total_price_usd"], ascending=True)
-        st.dataframe(results_df[display_cols], width="stretch")
-    else:
-        st.dataframe(results_df, width="stretch")
+        rows.append(
+            {
+                "Provider": o.provider,
+                "Origin": o.origin,
+                "Destination": o.destination,
+                "Type": o.trip_structure,
+                "Departure Date": str(o.departure_date),
+                "Return Date": str(o.return_date) if o.return_date else None,
+                "Airline": o.airline_name or o.airline,
+                "Flight Number": first_seg.flight_number if first_seg else None,
+                "Depart Time": fmt_time_ampm(first_seg.dep_at) if first_seg else None,
+                "Arrive Time": fmt_time_ampm(first_seg.arr_at) if first_seg else None,
+                "Stops Depart": o.stops_out,
+                "Stops Return": o.stops_return,
+                "Price ($)": o.total_price_usd,
+                "Score": s.score,
+            }
+        )
+
+    results_df = pd.DataFrame(rows)
+    if not results_df.empty and "Price ($)" in results_df.columns:
+        results_df = results_df.sort_values(by=["Price ($)"], ascending=True)
+
+    if "Price ($)" in results_df.columns:
+        results_df["Price ($)"] = results_df["Price ($)"].map(
+            lambda x: f"${float(x):,.0f}")
+
+    st.dataframe(results_df, width="stretch")
 
     st.caption(
         "The recommended option uses a heuristic score that balances price, number of stops, "
-        "date offset, and region. In the future, this scoring can be learned from data via an ML model."
+        "and date offset. In the future, this scoring can be learned from data via an ML model."
     )
