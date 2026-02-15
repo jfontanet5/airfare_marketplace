@@ -65,7 +65,6 @@ def _parse_iso8601_duration_minutes(duration: Optional[str]) -> Optional[int]:
     minutes = 0
     tmp = duration[2:]  # strip 'PT'
 
-    # Very small parser; Amadeus typically uses H and M (sometimes S)
     num = ""
     for ch in tmp:
         if ch.isdigit():
@@ -78,7 +77,6 @@ def _parse_iso8601_duration_minutes(duration: Optional[str]) -> Optional[int]:
             minutes = int(num)
             num = ""
         else:
-            # ignore unknown tokens (e.g., seconds)
             num = ""
 
     return hours * 60 + minutes
@@ -139,6 +137,82 @@ def _build_itineraries(
     return out
 
 
+def _offer_signature(offer: Offer) -> str:
+    """
+    Stable signature for an itinerary based on segment chain.
+    Same physical flight plan -> same signature.
+    """
+    parts: List[str] = []
+
+    for it in (offer.itineraries or []):
+        segs = it.segments or []
+        seg_parts: List[str] = []
+        for s in segs:
+            dep = s.dep_at.isoformat() if getattr(s, "dep_at", None) else ""
+            seg_parts.append(
+                "|".join(
+                    [
+                        s.origin or "",
+                        s.destination or "",
+                        s.carrier_code or "",
+                        s.flight_number or "",
+                        dep,
+                    ]
+                )
+            )
+        parts.append(">".join(seg_parts))
+
+    sig = "||".join(parts).strip()
+    if sig:
+        return sig
+
+    # Fallback if itineraries missing (should be rare after normalization)
+    return "|".join(
+        [
+            offer.origin or "",
+            offer.destination or "",
+            str(getattr(offer, "departure_date", "") or ""),
+            str(getattr(offer, "return_date", "") or ""),
+            offer.airline or "",
+            str(offer.stops_out),
+            str(offer.stops_return),
+        ]
+    )
+
+
+def _offer_rank_key(offer: Offer):
+    """
+    Lower is better.
+    Rank by (price, stops, earliest outbound departure).
+    """
+    total_stops = (offer.stops_out or 0) + (offer.stops_return or 0)
+
+    first_dep = None
+    try:
+        if offer.itineraries and offer.itineraries[0].segments:
+            first_dep = offer.itineraries[0].segments[0].dep_at
+    except Exception:
+        first_dep = None
+
+    dep_sort = first_dep or datetime.max
+    return (offer.total_price_usd, total_stops, dep_sort)
+
+
+def _dedup_offers(offers: List[Offer]) -> List[Offer]:
+    """
+    Deduplicate offers by itinerary signature; keep best-ranked offer per signature.
+    """
+    best_by_sig: Dict[str, Offer] = {}
+    for o in offers:
+        sig = _offer_signature(o)
+        if sig not in best_by_sig:
+            best_by_sig[sig] = o
+        else:
+            if _offer_rank_key(o) < _offer_rank_key(best_by_sig[sig]):
+                best_by_sig[sig] = o
+    return list(best_by_sig.values())
+
+
 class AmadeusProvider(FlightSearchProvider):
     """
     Live provider (Amadeus Self-Service Flight Offers Search).
@@ -197,21 +271,18 @@ class AmadeusProvider(FlightSearchProvider):
                 trip_structure=params.trip_structure,
                 departure_date=params.departure_date,
                 return_date=params.return_date,
-
-                # legacy summary fields
+                # legacy summary fields (keep for now)
                 airline=airline_code,
                 stops_out=stops_out,
                 stops_return=stops_ret,
                 total_price_usd=float(total_str),
-
+                currency=str(currency),
+                score=0.0,
+                raw=o,
                 # Phase 3 richer fields
                 itineraries=itineraries_obj,
                 airline_name=airline_name,
                 purchase_url=None,
-
-                currency=str(currency),
-                score=0.0,
-                raw=o,
             )
             offers.append(offer)
 
@@ -219,7 +290,8 @@ class AmadeusProvider(FlightSearchProvider):
         max_allowed = _max_stops_from_label(params.max_stops)
         if max_allowed >= 1:
             offers = [
-                of for of in offers
+                of
+                for of in offers
                 if (of.stops_out <= max_allowed) and (of.stops_return <= max_allowed)
             ]
 
@@ -227,9 +299,10 @@ class AmadeusProvider(FlightSearchProvider):
 
     def search(self, params: SearchParams) -> List[Offer]:
         if not params.flexible_dates:
-            return self._search_one(params)
+            return _dedup_offers(self._search_one(params))
 
         results: List[Offer] = []
+
         trip_len = None
         if params.trip_structure == "Roundtrip" and params.return_date:
             trip_len = (params.return_date - params.departure_date).days
@@ -254,6 +327,7 @@ class AmadeusProvider(FlightSearchProvider):
                 flexible_dates=False,
                 use_real_data=params.use_real_data,
             )
+
             results.extend(self._search_one(p2))
 
-        return results
+        return _dedup_offers(results)
