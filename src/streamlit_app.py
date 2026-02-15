@@ -289,23 +289,11 @@ if search_clicked:
         # --- ML price-drop probability (TEMP shim: ML expects dict) ---
         if price_model is not None:
             try:
-                legacy_for_ml = {
-                    "airline": recommended_offer.airline,
-                    "total_price_usd": recommended_offer.total_price_usd,
-                    "stops_out": recommended_offer.stops_out,
-                    "stops_return": recommended_offer.stops_return,
-                    "trip_structure": recommended_offer.trip_structure,
-                    "departure_date": str(recommended_offer.departure_date),
-                    "return_date": str(recommended_offer.return_date) if recommended_offer.return_date else None,
-                    "region": "US",  # TEMP legacy expectation; will remove in ML migration
-                }
-
                 prob_drop = predict_price_drop_probability(
                     price_model,
-                    legacy_for_ml,
+                    recommended_offer,   # <-- pass Offer directly
                     search_date=date.today(),
                 )
-
                 st.metric(
                     label="Chance of price drop (next 7 days)",
                     value=f"{prob_drop:.0%}",

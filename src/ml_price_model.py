@@ -16,7 +16,7 @@ This file defines:
 from __future__ import annotations
 
 from datetime import date
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -24,6 +24,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from core.models import Offer
 
 # -----------------------------------------------------------------------------
 # Problem definition
@@ -258,29 +259,37 @@ def train_baseline_model(df: pd.DataFrame) -> Pipeline:
 # -----------------------------------------------------------------------------
 
 
-def build_ml_row_from_offer(offer: Dict[str, Any], search_date: date) -> Dict[str, Any]:
+def build_ml_row_from_offer(offer: Union[Offer, Dict[str, Any]], search_date: date) -> Dict[str, Any]:
     """
-    Convert a current offer (as used in the app) + today's date into a single
-    ML row with the expected columns.
+    Convert an Offer (preferred) or legacy dict offer + today's date into a single ML row.
 
-    This function is the glue between your search engine and the ML model.
+    Backward-compatible: supports both Offer objects and dicts.
     """
-    origin = offer.get("origin")
-    destination = offer.get("destination")
-    airline = offer.get("airline", "Unknown")
-    region = offer.get("region", "US")
-    departure_str = offer.get("departure_date")
-
-    if isinstance(departure_str, date):
-        departure_date = departure_str
+    # --- Pull fields depending on input type ---
+    if isinstance(offer, Offer):
+        origin = offer.origin
+        destination = offer.destination
+        airline = offer.airline or "Unknown"          # keep code for model consistency
+        departure_date = offer.departure_date         # already a date
+        current_price = float(offer.total_price_usd or 0.0)
+        region = "US"  # Legacy feature in synthetic model; remove later when retraining on real history
     else:
-        # e.g. '2025-12-03'
-        departure_date = date.fromisoformat(str(departure_str))
+        origin = offer.get("origin")
+        destination = offer.get("destination")
+        airline = offer.get("airline", "Unknown")
+        region = offer.get("region", "US")
+        departure_str = offer.get("departure_date")
+
+        if isinstance(departure_str, date):
+            departure_date = departure_str
+        else:
+            departure_date = date.fromisoformat(str(departure_str))
+
+        current_price = float(offer.get("total_price_usd", 0.0))
 
     days_until_departure = (departure_date - search_date).days
-    current_price = float(offer.get("total_price_usd", 0.0))
 
-    row = {
+    return {
         "origin": origin,
         "destination": destination,
         "airline": airline,
@@ -291,11 +300,9 @@ def build_ml_row_from_offer(offer: Dict[str, Any], search_date: date) -> Dict[st
         "current_price_usd": current_price,
     }
 
-    return row
-
 
 def predict_price_drop_probability(
-    model: Pipeline, offer: Dict[str, Any], search_date: date
+    model: Pipeline, offer: Union[Offer, Dict[str, Any]], search_date: date
 ) -> float:
     """
     Given a trained model and a current offer, return the probability that
@@ -303,6 +310,5 @@ def predict_price_drop_probability(
     """
     ml_row = build_ml_row_from_offer(offer, search_date)
     X = pd.DataFrame([ml_row])
-
     proba = model.predict_proba(X)[0, 1]  # class 1 = price_drops
     return float(proba)
