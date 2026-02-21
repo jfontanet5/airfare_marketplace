@@ -1,60 +1,99 @@
 Airfare Marketplace
-A modular airfare search and pricing intelligence system built to explore:
-Provider abstraction
-Real-time API integration (OAuth2)
-Historical price tracking
-Price-drop prediction using machine learning
-Clean system design for extensibility
-This project serves as a systems design and applied ML portfolio piece.
+A modular airfare intelligence engine with historical storage, FX normalization, and ML-driven price forecasting.
+This project demonstrates production-style architecture across:
+Provider abstraction & external API integration
+Canonical domain modeling
+Deterministic deduplication
+Historical data persistence
+FX normalization with caching
+ML inference integration
+Clean separation of UI, business logic, and infrastructure
+The goal is not just to search flights — but to design a scalable airfare intelligence system.
 
 Problem
-Most airfare search tools:
-Personalize prices based on cookies and location
-Obscure price variability over time
-Do not expose historical trends
-Offer no predictive guidance on when to buy
-This project explores how a transparent airfare engine could be architected with:
-Multiple interchangeable data providers
-Historical fare tracking
-ML-driven price-drop prediction
-Clear separation between UI, business logic, and integrations
+Modern airfare platforms:
+Obscure historical pricing behavior
+Personalize results without transparency
+Provide no predictive guidance
+Mix currency representations
+Lack architectural modularity
+This project explores how a transparent airfare engine can be built with:
+Clear domain contracts
+Interchangeable providers
+Historical data persistence
+Currency normalization
+Leakage-safe ML integration
+Extensible system boundaries
 
 System Architecture
 airfare_marketplace/
 │
 ├── src/
 │ ├── streamlit_app.py # UI layer
-│ ├── core/ # Domain models
-│ ├── providers/ # Data source abstraction
-│ ├── services/ # External integrations
-│ ├── ml_price_model.py # ML training + inference
-│ └── engine.py # Scoring + recommendation logic
+│ ├── core/
+│ │ ├── models.py # Canonical Offer → Itinerary → Segment model
+│ │ └── scoring.py # Recommendation scoring engine
+│ │
+│ ├── providers/
+│ │ ├── base.py
+│ │ ├── mock_provider.py
+│ │ ├── csv_provider.py
+│ │ └── amadeus_provider.py # Live OAuth2 integration
+│ │
+│ ├── services/
+│ │ ├── amadeus_client.py # OAuth2 + API client
+│ │ └── fx_rate_services.py # Daily FX conversion (EUR → USD)
+│ │
+│ ├── sqlite_history_store.py # Historical storage layer
+│ ├── data_access.py
+│ └── ml_price_model.py # ML inference utilities
+│
+├── data/
+│ └── price_history.sqlite # Historical observations (local)
+│
+├── models/
+│ └── price_drop_model.pkl # Serialized ML model
 │
 ├── notebooks/ # ML experimentation
-├── data/ # Local data (ignored)
 └── requirements.txt
-Architectural Principles
-Provider pattern for data source abstraction
-Dataclass-based domain models for normalized offers
-OAuth2 client credentials flow for secure API integration
-Environment-based secret management
-Separation of concerns between UI, engine, and external services
+
+Canonical Domain Model
+Offer
+├── origin / destination
+├── departure_date / return_date
+├── airline summary
+├── price + currency
+├── offer_signature (deterministic)
+└── itineraries[]
+└── segments[]
+
+Each segment includes:
+origin / destination
+departure / arrival timestamps
+carrier codes
+flight number
+aircraft code
+This normalized structure enables:
+Deterministic itinerary-level deduplication
+Stable offer_signature
+Clean UI rendering
+ML-ready feature extraction
+Storage abstraction
 
 Providers
 The system supports interchangeable providers:
-
-1. MockProvider
-   Offline demonstration mode for deterministic testing.
-2. CSVProvider
-   Local dataset-driven provider for development and reproducibility.
-3. AmadeusProvider
-   Live integration with Amadeus Flight Offers API:
-   OAuth2 token exchange
-   Token caching
-   Flexible-date multi-query logic
-   Post-filtering for stop constraints
-   Providers return normalized Offer objects.
-   A bridge layer converts them into legacy dictionaries for scoring compatibility.
+1️⃣ MockProvider
+Offline deterministic provider for testing.
+2️⃣ CSVProvider
+Local reproducible dataset provider.
+3️⃣ AmadeusProvider (Live)
+OAuth2 Client Credentials flow
+Token caching
+Flexible date expansion (±3 days)
+Post-filtering for stop constraints
+Itinerary-level deduplication
+Stable itinerary signatures
+All providers return normalized Offer objects.
 
 Machine Learning
 The ML module predicts the probability of a fare dropping within the next 7 days.

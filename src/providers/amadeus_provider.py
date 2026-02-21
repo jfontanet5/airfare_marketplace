@@ -131,8 +131,13 @@ def _build_itineraries(
                 )
             )
 
-        out.append(Itinerary(direction=direction, segments=segs,
-                   duration_minutes=duration_minutes))
+        out.append(
+            Itinerary(
+                direction=direction,
+                segments=segs,
+                duration_minutes=duration_minutes,
+            )
+        )
 
     return out
 
@@ -284,6 +289,9 @@ class AmadeusProvider(FlightSearchProvider):
                 airline_name=airline_name,
                 purchase_url=None,
             )
+
+            offer.offer_signature = _offer_signature(offer)
+
             offers.append(offer)
 
         # Post-filter stops if max is 1 or 2+ (Amadeus only supports nonStop switch)

@@ -162,32 +162,30 @@ class SqlitePriceHistoryStore:
             if o.itineraries and o.itineraries[0].segments:
                 first_seg = o.itineraries[0].segments[0]
 
-            rows.append((
-                search_ts.isoformat(),
-                o.provider,
-                origin,
-                destination,
-                trip_structure,
-                departure_date.isoformat(),
-                return_date.isoformat() if return_date else None,
-                int(passengers),
-                max_stops_label,
-                1 if flexible_dates else 0,
-
-                (o.airline or None),
-                (o.airline_name or None),
-                (first_seg.flight_number if first_seg else None),
-                (_dt_to_str(first_seg.dep_at) if first_seg else None),
-                (_dt_to_str(first_seg.arr_at) if first_seg else None),
-
-                int(o.stops_out or 0),
-                int(o.stops_return or 0),
-
-                float(o.total_price_usd or 0.0),
-                (o.currency or "USD"),
-
-                offer_signature(o),
-            ))
+            rows.append(
+                (
+                    search_ts.isoformat(),
+                    o.provider,
+                    origin,
+                    destination,
+                    trip_structure,
+                    departure_date.isoformat(),
+                    return_date.isoformat() if return_date else None,
+                    int(passengers),
+                    max_stops_label,
+                    1 if flexible_dates else 0,
+                    (o.airline or None),
+                    (o.airline_name or None),
+                    (first_seg.flight_number if first_seg else None),
+                    (_dt_to_str(first_seg.dep_at) if first_seg else None),
+                    (_dt_to_str(first_seg.arr_at) if first_seg else None),
+                    int(o.stops_out or 0),
+                    int(o.stops_return or 0),
+                    float(o.total_price_usd or 0.0),
+                    (o.currency or "USD"),
+                    offer_signature(o),
+                )
+            )
 
         with self._connect() as conn:
             conn.executemany(
@@ -201,7 +199,7 @@ class SqlitePriceHistoryStore:
                     offer_signature
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
-                rows
+                rows,
             )
 
         return len(rows)
@@ -222,6 +220,7 @@ class SqlitePriceHistoryStore:
                 SELECT
                     search_ts AS search_datetime,
                     price_usd,
+                    currency,
                     airline_name,
                     airline_code,
                     flight_number,
@@ -241,6 +240,7 @@ class SqlitePriceHistoryStore:
                 params=(origin, destination,
                         departure_date.isoformat(), int(limit)),
             )
+        return df
 
     def get_market_trend(
         self,
@@ -251,6 +251,7 @@ class SqlitePriceHistoryStore:
     ) -> pd.DataFrame:
         """
         Market trend = daily minimum observed price for route + departure_date.
+        (NOTE: currently operates on stored numeric values as-is.)
         """
         with self._connect() as conn:
             df = pd.read_sql_query(
@@ -272,3 +273,70 @@ class SqlitePriceHistoryStore:
                         departure_date.isoformat(), int(limit_days)),
             )
         return df
+
+    def get_market_trend_usd_dual(
+        self,
+        origin: str,
+        destination: str,
+        departure_date: date,
+        fx_service,
+        limit: int = 5000,
+    ) -> tuple[str, pd.DataFrame]:
+        """
+        Dual-mode market trend with USD conversion at extraction time.
+
+        Returns (mode, df):
+          - mode == "raw":  df columns: [search_datetime, price_usd, currency, observations]
+          - mode == "daily": df columns: [search_day, min_price_usd, observations]
+        """
+        with self._connect() as conn:
+            df = pd.read_sql_query(
+                """
+                SELECT search_ts, price_usd, currency
+                FROM price_observations
+                WHERE origin = ?
+                  AND destination = ?
+                  AND departure_date = ?
+                ORDER BY search_ts ASC
+                LIMIT ?;
+                """,
+                conn,
+                params=(origin, destination,
+                        departure_date.isoformat(), int(limit)),
+            )
+
+        if df.empty:
+            return "raw", df
+
+        # Parse timestamps (your stored search_ts is naive ISO; treat as UTC)
+        df["search_ts"] = pd.to_datetime(
+            df["search_ts"], errors="coerce", utc=True)
+        df = df.dropna(subset=["search_ts"])
+
+        if df.empty:
+            return "raw", df
+
+        # Convert to USD (stored price_usd currently holds native amount)
+        def _to_usd(row) -> float:
+            amt = float(row["price_usd"])
+            cur = str(row["currency"] or "USD")
+            ts = row["search_ts"].to_pydatetime()  # tz-aware UTC
+            return float(fx_service.amount_to_usd(amt, cur, ts))
+
+        df["price_usd"] = df.apply(_to_usd, axis=1)
+
+        # Decide mode based on distinct days present
+        df["search_day"] = df["search_ts"].dt.strftime("%Y-%m-%d")
+        n_days = int(df["search_day"].nunique())
+
+        if n_days <= 1:
+            out = df.rename(columns={"search_ts": "search_datetime"}).copy()
+            out["observations"] = 1
+            return "raw", out[["search_datetime", "price_usd", "currency", "observations"]]
+
+        daily = (
+            df.groupby("search_day", as_index=False)
+            .agg(min_price_usd=("price_usd", "min"), observations=("price_usd", "count"))
+            .sort_values("search_day")
+        )
+        return "daily", daily
