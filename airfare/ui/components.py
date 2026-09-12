@@ -12,9 +12,12 @@ from airfare.domain.models import Itinerary, ScoredOffer
 from airfare.ui import format as fmt
 
 TEAL = "#1A7F8E"
-TEAL_DARK = "#146673"
-GOLD = "#F2B233"
-GOLD_SOFT = "#FBEBC2"
+TEAL_DARK = "#0F5561"
+TEAL_MID = "#3FA3B1"
+AQUA = "#CFE9EC"
+AQUA_SOFT = "#E9F5F6"
+AMBER = "#C97A00"  # reserved for warnings and "high" only
+AMBER_SOFT = "#FBF0D9"
 INK = "#23272B"
 SLATE = "#6B7280"
 LINE = "#E4E8EC"
@@ -37,9 +40,9 @@ CSS = f"""
   .afm-chip.live    {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
   .afm-chip.low     {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
   .afm-chip.typical {{ background: #EEF1F4; color: #4B5563; }}
-  .afm-chip.high    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
-  .afm-chip.warn    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
-  .afm-chip.demo    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
+  .afm-chip.high    {{ background: {AMBER_SOFT}; color: {AMBER}; }}
+  .afm-chip.warn    {{ background: {AMBER_SOFT}; color: {AMBER}; }}
+  .afm-chip.demo    {{ background: {AQUA}; color: {TEAL_DARK}; }}
   .afm-chip.model   {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
   .afm-seg {{ font-variant-numeric: tabular-nums; }}
   div[data-testid="stMetric"] {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: .8rem; padding: .7rem .9rem; }}
@@ -52,10 +55,10 @@ CSS = f"""
 
 HEX_MARK = f"""
 <svg width="190" height="170" viewBox="0 0 190 170" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <polygon points="60,4 108,4 132,46 108,88 60,88 36,46" fill="{GOLD}" opacity=".95"/>
-  <polygon points="112,50 160,50 184,92 160,134 112,134 88,92" fill="{TEAL}" opacity=".9"/>
-  <polygon points="36,90 84,90 108,132 84,174 36,174 12,132" fill="{GOLD_SOFT}"/>
-  <polygon points="8,20 34,20 47,42 34,64 8,64 -5,42" fill="rgba(26,127,142,.18)"/>
+  <polygon points="60,4 108,4 132,46 108,88 60,88 36,46" fill="{TEAL_MID}"/>
+  <polygon points="112,50 160,50 184,92 160,134 112,134 88,92" fill="{TEAL_DARK}"/>
+  <polygon points="36,90 84,90 108,132 84,174 36,174 12,132" fill="{AQUA}"/>
+  <polygon points="8,20 34,20 47,42 34,64 8,64 -5,42" fill="{AQUA_SOFT}"/>
 </svg>
 """
 
@@ -208,7 +211,7 @@ def trend_chart(trend: pd.DataFrame, height: int = 260) -> alt.Chart | None:
             color=alt.Color(
                 "series:N",
                 title=None,
-                scale=alt.Scale(range=[TEAL, "#B8C0C8", GOLD]),
+                scale=alt.Scale(range=[TEAL_DARK, "#B8C0C8", TEAL_MID]),
                 legend=alt.Legend(orient="top"),
             ),
             tooltip=[
