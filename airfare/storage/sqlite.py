@@ -188,6 +188,28 @@ class SqlitePriceHistory:
             "max": float(s.max()),
         }
 
+    def routes(self) -> pd.DataFrame:
+        with self.connect() as conn:
+            return pd.read_sql_query(
+                """SELECT origin, destination, COUNT(*) AS observations,
+                          MIN(substr(search_ts,1,10)) AS first_seen, MAX(substr(search_ts,1,10)) AS last_seen
+                   FROM observations WHERE price_usd IS NOT NULL
+                   GROUP BY origin, destination ORDER BY observations DESC""",
+                conn,
+            )
+
+    def cheapest_by_departure(self, origin: str, destination: str) -> pd.DataFrame:
+        with self.connect() as conn:
+            return pd.read_sql_query(
+                """SELECT departure_date, MIN(price_usd) AS min_price_usd,
+                          MAX(substr(search_ts,1,10)) AS last_seen
+                   FROM observations
+                   WHERE origin=? AND destination=? AND price_usd IS NOT NULL
+                   GROUP BY departure_date ORDER BY departure_date""",
+                conn,
+                params=(origin, destination),
+            )
+
     def latest_offers(self, query: SearchQuery) -> list[Offer]:
         with self.connect() as conn:
             latest = conn.execute(

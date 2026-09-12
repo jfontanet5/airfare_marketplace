@@ -11,6 +11,8 @@ built to show how a production airfare system is structured, not just how to cal
 
 Runs fully offline out of the box. Add a SerpApi key for live Google Flights fares.
 
+<p align="center"><img src="docs/screenshots/search.png" width="760" alt="Search results: ranked itinerary cards with price, drop probability and scoring reasons"></p>
+
 ## Why
 
 Consumer fare sites obscure how a price got to where it is: results are personalised,
@@ -44,7 +46,7 @@ airfare/
 ├── storage/             PriceHistoryRepository protocol + SQLite impl with versioned migrations
 ├── ml/                  features (shared by train + inference), dataset builder, synthetic data, train, registry
 ├── collect/             airfare-collect: watch-list snapshots, CSV partitions, request budget
-└── ui/                  Streamlit app (thin: calls SearchService only)
+└── ui/                  Streamlit app: Search · Route trends · Model · About (thin: calls SearchService only)
 ```
 
 Data flow for one search:
@@ -110,6 +112,13 @@ make fmt            # auto-format and fix imports
 
 CI runs the same `check` target plus a Docker build on every push and pull request.
 
+## The app
+
+| Search | Route trends | Model |
+| --- | --- | --- |
+| Ranked itinerary cards with full segments and layovers, USD price with the native quote and FX rate, a "why recommended" breakdown, price-position badge (low / typical / high vs. the route's history), sort and airline filters, and the price history for the searched date. | Every route the store knows: cheapest fare by departure date, fare distribution, per-departure-date price-over-time with a per-itinerary movement table, raw observations with CSV download. | What the signal means, the model card (source, metrics, features), and real-data readiness — how many labeled rows exist toward the training threshold. |
+| ![](docs/screenshots/search.png) | ![](docs/screenshots/trends.png) | ![](docs/screenshots/model.png) |
+
 ## Machine learning
 
 The app shows *chance of a ≥5% drop within 7 days* for each fare.
@@ -134,7 +143,6 @@ p25–p75) works from the first few searches.
 - [x] Scheduled route collector (`airfare.collect`) and observation-based dataset builder
 - [ ] Turn on the daily collection schedule and retrain on real observations
 - [ ] Response cache for live searches (schema table already exists)
-- [ ] Route-trend and model-card pages in the UI
 - [ ] Deploy the offline demo to Streamlit Community Cloud
 
 ## Author

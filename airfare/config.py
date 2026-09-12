@@ -14,7 +14,6 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-
 def _project_root() -> Path:
     """Repo root when running from a source checkout; otherwise the working directory.
 

@@ -64,3 +64,17 @@ def test_migrates_legacy_schema(tmp_path: Path) -> None:
         names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert "price_observations" not in names and "fx_rates" not in names
     assert SqlitePriceHistory(db).route_observations("SJU", "JAX").shape[0] == 1  # idempotent
+
+
+def test_routes_and_cheapest_by_departure(tmp_path: Path, query: SearchQuery) -> None:
+    repo = SqlitePriceHistory(tmp_path / "h.sqlite")
+    t0 = datetime(2026, 9, 1, 12, tzinfo=UTC)
+    repo.record([_obs(300, t0, query), _obs(250, t0 + timedelta(days=1), query)])
+    routes = repo.routes()
+    assert routes.iloc[0].to_dict() == {
+        "origin": "SJU", "destination": "JFK", "observations": 2,
+        "first_seen": "2026-09-01", "last_seen": "2026-09-02",
+    }  # fmt: skip
+    by_dep = repo.cheapest_by_departure("SJU", "JFK")
+    assert by_dep["min_price_usd"].tolist() == [250.0]
+    assert repo.cheapest_by_departure("XXX", "YYY").empty

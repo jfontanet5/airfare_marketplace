@@ -84,3 +84,9 @@ class PriceHistoryRepository(Protocol):
 
     def latest_offers(self, query: SearchQuery) -> list[Offer]:
         """Most recent snapshot matching the query, rebuilt as Offers (for the Replay provider)."""
+
+    def routes(self) -> pd.DataFrame:
+        """Routes with history: origin, destination, observations, first_seen, last_seen."""
+
+    def cheapest_by_departure(self, origin: str, destination: str) -> pd.DataFrame:
+        """Cheapest USD fare per departure date: departure_date, min_price_usd, last_seen."""

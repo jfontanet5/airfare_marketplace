@@ -56,7 +56,7 @@ ignore = ["PLR0913", "PLR2004", "RUF012"]
 "tests/*" = ["PLR", "S101", "E501"]
 "airfare/storage/sqlite.py" = ["E501"]
 "airfare/collect/partitions.py" = ["E501"]
-"airfare/ui/app.py" = ["E501"]
+"airfare/ui/*" = ["E501", "RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -69,6 +69,7 @@ plugins = ["pydantic.mypy"]
 module = ["airfare.ui.*"]
 disallow_untyped_calls = false
 disallow_untyped_decorators = false
+warn_return_any = false  # altair's chained builders are untyped
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
