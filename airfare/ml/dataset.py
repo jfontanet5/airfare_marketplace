@@ -21,7 +21,7 @@ def daily_prices(observations: pd.DataFrame) -> pd.DataFrame:
     df = observations.dropna(subset=["price_usd"]).copy()
     if df.empty:
         return df
-    df["search_ts"] = pd.to_datetime(df["search_ts"], utc=True)
+    df["search_ts"] = pd.to_datetime(df["search_ts"], utc=True, format="ISO8601")
     df["search_day"] = df["search_ts"].dt.floor("D")
     df = df.sort_values(["signature", "search_day", "price_usd"])
     return df.drop_duplicates(["signature", "search_day"], keep="first").reset_index(drop=True)

@@ -156,7 +156,7 @@ class SqlitePriceHistory:
         with self.connect() as conn:
             df = pd.read_sql_query(sql, conn, params=tuple(params))
         if not df.empty:
-            df["search_ts"] = pd.to_datetime(df["search_ts"], utc=True)
+            df["search_ts"] = pd.to_datetime(df["search_ts"], utc=True, format="ISO8601")
         return df
 
     def daily_min_trend(self, origin: str, destination: str, departure_date: date) -> pd.DataFrame:

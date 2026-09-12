@@ -78,3 +78,22 @@ def test_routes_and_cheapest_by_departure(tmp_path: Path, query: SearchQuery) ->
     by_dep = repo.cheapest_by_departure("SJU", "JFK")
     assert by_dep["min_price_usd"].tolist() == [250.0]
     assert repo.cheapest_by_departure("XXX", "YYY").empty
+
+
+def test_mixed_timestamp_formats_parse(tmp_path: Path) -> None:
+    """Legacy rows are naive ISO strings; new rows carry +00:00. Both must parse."""
+    repo = SqlitePriceHistory(tmp_path / "h.sqlite")
+    with repo.connect() as conn:
+        for ts, sig in (
+            ("2026-02-15T20:48:56.220533", "a"),
+            ("2026-09-12T15:32:17.668771+00:00", "b"),
+        ):
+            conn.execute(
+                "INSERT INTO observations (search_ts, provider, origin, destination, departure_date, "
+                "airline_code, stops_out, stops_return, price_amount, currency, price_usd, signature) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (ts, "x", "SJU", "JFK", "2026-10-01", "B6", 0, 0, 100.0, "USD", 100.0, sig),
+            )
+    df = repo.route_observations("SJU", "JFK")
+    assert str(df["search_ts"].dtype) == "datetime64[ns, UTC]"
+    assert repo.route_price_stats("SJU", "JFK")["count"] == 2
