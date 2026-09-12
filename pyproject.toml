@@ -19,7 +19,7 @@ dependencies = [
     "tenacity>=9.0,<10",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.6,<3",
-    "altair>=5.4,<6",
+    "altair>=5.4,<7",
     "joblib>=1.4,<2",
 ]
 
