@@ -35,6 +35,15 @@ check: lint typecheck test ## Everything CI runs
 train: $(VENV) ## Train the synthetic demo model into models/
 	$(BIN)/airfare-train
 
+train-real: $(VENV) ## Train on collected observations (needs enough labeled history)
+	$(BIN)/airfare-train --source observations
+
+collect: $(VENV) ## Snapshot the sample watch-list (9 live requests) and export today's partition
+	$(BIN)/airfare-collect run --watchlist data/sample/watchlist.txt --export
+
+collect-dry: $(VENV) ## Show the collection plan without spending requests
+	$(BIN)/airfare-collect run --watchlist data/sample/watchlist.txt --dry-run
+
 docker-build: ## Build the container image
 	docker build -t airfare-marketplace .
 
@@ -45,4 +54,4 @@ clean: ## Remove caches
 	rm -rf .mypy_cache .ruff_cache .pytest_cache .coverage htmlcov
 	find . -name __pycache__ -type d -prune -exec rm -rf {} +
 
-.PHONY: help install run test lint fmt typecheck check train docker-build docker-run clean
+.PHONY: help install run test lint fmt typecheck check train train-real collect collect-dry docker-build docker-run clean

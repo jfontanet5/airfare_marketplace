@@ -42,7 +42,8 @@ airfare/
 │   ├── airports.py      bundled commercial airports + optional full OurAirports refresh
 │   └── search.py        SearchService: provider → normalize → score → persist → SearchResult
 ├── storage/             PriceHistoryRepository protocol + SQLite impl with versioned migrations
-├── ml/                  features (shared by train + inference), synthetic data, train, registry, predict
+├── ml/                  features (shared by train + inference), dataset builder, synthetic data, train, registry
+├── collect/             airfare-collect: watch-list snapshots, CSV partitions, request budget
 └── ui/                  Streamlit app (thin: calls SearchService only)
 ```
 
@@ -120,16 +121,18 @@ carrier). The model is a calibrated `HistGradientBoostingClassifier` trained wit
 data source, row counts, features, and validation metrics. The UI labels it as a
 synthetic-data demo. Its metrics describe that synthetic process, not real markets.
 
-**Path to a real model.** Every search already writes observations keyed by itinerary
-signature. The next step is a scheduled collector that snapshots a watch-list of routes
-daily; `ml/train.py` then swaps `make_synthetic_training_data` for a dataset built from
-observations (label = future 7-day minimum vs. current price per signature) with the same
-features, split, calibration, and card. Until then a non-ML **price position** badge
-(low / typical / high vs. the route's observed p25–p75) works as soon as any history exists.
+**Real model.** `airfare-collect` snapshots a watch-list of routes daily (see
+[docs/collector.md](docs/collector.md)); `ml/dataset.py` turns the observations into
+labeled rows — one per (itinerary signature, search day), label = the same itinerary's
+price fell ≥5% within the next 7 days, censored rows dropped — and `make train-real`
+runs the same split, calibration and model-card pipeline on them. Until enough history
+exists, a non-ML **price position** badge (low / typical / high vs. the route's observed
+p25–p75) works from the first few searches.
 
 ## Roadmap
 
-- [ ] Scheduled route collector (`airfare.collect`) and observation-based dataset builder
+- [x] Scheduled route collector (`airfare.collect`) and observation-based dataset builder
+- [ ] Turn on the daily collection schedule and retrain on real observations
 - [ ] Response cache for live searches (schema table already exists)
 - [ ] Route-trend and model-card pages in the UI
 - [ ] Deploy the offline demo to Streamlit Community Cloud

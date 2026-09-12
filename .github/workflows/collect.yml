@@ -1,0 +1,36 @@
+name: Collect fares
+
+# Snapshots the watch-list and commits the day's CSV partition. Costs
+# (routes × horizons) SerpApi requests per run — 9 with the sample watch-list.
+# Uncomment `schedule` to run daily; requires the SERPAPI_API_KEY repo secret.
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "15 11 * * *"   # 11:15 UTC daily
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install .
+      - name: Rebuild history from committed partitions
+        run: airfare-collect import --from data/observations
+      - name: Snapshot watch-list
+        env:
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+        run: airfare-collect run --watchlist data/sample/watchlist.txt --max-requests 12 --export
+      - name: Commit partition
+        run: |
+          git config user.name "fare-collector"
+          git config user.email "fare-collector@users.noreply.github.com"
+          git add data/observations
+          git diff --cached --quiet || git commit -m "data: fares $(date -u +%F)"
+          git push

@@ -38,6 +38,7 @@ notebook = ["jupyter>=1.1", "ipykernel>=6.29"]
 
 [project.scripts]
 airfare-train = "airfare.ml.train:main"
+airfare-collect = "airfare.collect.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["airfare"]
@@ -54,6 +55,7 @@ ignore = ["PLR0913", "PLR2004", "RUF012"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PLR", "S101", "E501"]
 "airfare/storage/sqlite.py" = ["E501"]
+"airfare/collect/partitions.py" = ["E501"]
 "airfare/ui/app.py" = ["E501"]
 
 [tool.mypy]

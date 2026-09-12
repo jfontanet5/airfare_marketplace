@@ -1,0 +1,4 @@
+# One route per line. Each route × horizon is one provider request per run.
+SJU-JFK
+SJU-MIA
+MIA-JFK
