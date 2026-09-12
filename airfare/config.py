@@ -13,7 +13,19 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _project_root() -> Path:
+    """Repo root when running from a source checkout; otherwise the working directory.
+
+    An installed (non-editable) package lives in site-packages, where data/ and models/
+    must not go — CI, Docker and any `pip install .` user run from their project dir.
+    """
+    candidate = Path(__file__).resolve().parent.parent
+    return candidate if (candidate / "pyproject.toml").exists() else Path.cwd()
+
+
+PROJECT_ROOT = _project_root()
 
 
 class Settings(BaseSettings):
