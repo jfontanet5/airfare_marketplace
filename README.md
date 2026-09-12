@@ -9,6 +9,8 @@ A transparent airfare intelligence engine: provider-agnostic flight search, dete
 itinerary identity, USD-normalized price history, and a calibrated price-drop signal —
 built to show how a production airfare system is structured, not just how to call an API.
 
+**Live demo:** https://airfare-marketplace.streamlit.app (offline demo data; seeded with collected history)
+
 Runs fully offline out of the box. Add a SerpApi key for live Google Flights fares.
 
 <p align="center"><img src="docs/screenshots/search.png" width="760" alt="Search results: ranked itinerary cards with price, drop probability and scoring reasons"></p>
@@ -112,6 +114,15 @@ make fmt            # auto-format and fix imports
 
 CI runs the same `check` target plus a Docker build on every push and pull request.
 
+### Deploying
+
+The app is self-sufficient on a fresh clone: it seeds its history store from the committed
+CSV partitions in `data/observations/` and trains the synthetic demo model on first start
+if `models/` is absent. On Streamlit Community Cloud point the app at `airfare/ui/app.py`
+(dependencies come from `requirements.txt` → `pyproject.toml`); add `SERPAPI_API_KEY` to the
+app's secrets to enable live search there. `make docker-build && make docker-run` does the
+same in a container.
+
 ## The app
 
 | Search | Route trends | Model |
@@ -143,7 +154,6 @@ p25–p75) works from the first few searches.
 - [x] Scheduled route collector (`airfare.collect`) and observation-based dataset builder
 - [ ] Turn on the daily collection schedule and retrain on real observations
 - [ ] Response cache for live searches (schema table already exists)
-- [ ] Deploy the offline demo to Streamlit Community Cloud
 
 ## Author
 

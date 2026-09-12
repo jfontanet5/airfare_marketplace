@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import date
+import os
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 import streamlit as st
+from airfare.collect.partitions import export_day
 from airfare.config import get_settings
 from airfare.domain.models import SearchQuery
 from airfare.ml.train import train_synthetic
 from airfare.providers.mock import MockProvider
 from airfare.services.search import SearchService
 from airfare.storage.sqlite import SqlitePriceHistory
+from airfare.ui import bootstrap
 from streamlit.testing.v1 import AppTest
 
 APP = Path(__file__).parent.parent / "airfare" / "ui" / "app.py"
@@ -24,6 +27,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("AIRFARE_MODEL_DIR", str(tmp_path / "models"))
     monkeypatch.setenv("SERPAPI_API_KEY", "")
     monkeypatch.setenv("TWELVEDATA_API_KEY", "")
+    monkeypatch.setenv("AIRFARE_AUTOTRAIN_DEMO", "0")
     _reset_caches()
     yield tmp_path
     _reset_caches()
@@ -98,3 +102,25 @@ def test_about_page(env: Path) -> None:
     at = _page("about").run()
     assert not at.exception
     assert any("Design decisions" in h.value for h in at.subheader)
+
+
+def test_bootstrap_seeds_history_and_autotrains(env: Path) -> None:
+    """A fresh deployment gets history from committed partitions and a demo model."""
+    # Build a partition from a seeded store, then point a *new* empty store at it.
+    seed_db = env / "seed.sqlite"
+    _seed_history(seed_db)
+    parts = env / "observations"
+    export_day(SqlitePriceHistory(seed_db), datetime.now(UTC).date(), parts)
+    assert list(parts.glob("*.csv"))
+
+    bootstrap.PROJECT_ROOT = env  # partitions live under <root>/data/observations
+    (env / "data").mkdir(exist_ok=True)
+    parts.rename(env / "data" / "observations")
+    os.environ["AIRFARE_AUTOTRAIN_DEMO"] = "1"
+    st.cache_resource.clear()
+    store = bootstrap.history()
+    assert not store.routes().empty
+
+    pred = bootstrap.predictor()
+    assert pred is not None and pred.card.is_synthetic
+    assert (env / "models" / "price_drop" / "card.json").exists()
