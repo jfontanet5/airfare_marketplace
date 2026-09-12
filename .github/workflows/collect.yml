@@ -1,12 +1,13 @@
 name: Collect fares
 
 # Snapshots the watch-list and commits the day's CSV partition. Costs
-# (routes × horizons) SerpApi requests per run — 9 with the sample watch-list.
-# Uncomment `schedule` to run daily; requires the SERPAPI_API_KEY repo secret.
+# (routes x horizons) SerpApi requests per run: 3 routes x 1 horizon = 3/day,
+# ~90/month. Requires the SERPAPI_API_KEY repo secret. To pause, comment out
+# `schedule` or disable the workflow in the Actions tab.
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "15 11 * * *"   # 11:15 UTC daily
+  schedule:
+    - cron: "15 11 * * *"   # 11:15 UTC daily (07:15 Puerto Rico)
 
 permissions:
   contents: write
@@ -26,7 +27,7 @@ jobs:
       - name: Snapshot watch-list
         env:
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
-        run: airfare-collect run --watchlist data/sample/watchlist.txt --max-requests 12 --export
+        run: airfare-collect run --watchlist data/sample/watchlist.txt --horizons 30 --max-requests 5 --export
       - name: Commit partition
         run: |
           git config user.name "fare-collector"
