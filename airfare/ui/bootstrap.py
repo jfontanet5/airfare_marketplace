@@ -13,7 +13,7 @@ import os
 import streamlit as st
 
 from airfare.collect.partitions import import_partitions
-from airfare.config import PROJECT_ROOT, Settings, get_settings
+from airfare.config import Settings, get_settings
 from airfare.ml.predict import PriceDropPredictor
 from airfare.ml.train import train_synthetic
 from airfare.services.airports import Airport, load_airports
@@ -51,7 +51,7 @@ def settings() -> Settings:
 @st.cache_resource(show_spinner=False)
 def history() -> SqlitePriceHistory:
     store = SqlitePriceHistory(settings().airfare_db_path)
-    partitions = PROJECT_ROOT / "data" / "observations"
+    partitions = settings().airfare_seed_dir
     if partitions.is_dir() and store.routes().empty:
         n = import_partitions(store, partitions)
         log.info("seeded history store with %d observations from %s", n, partitions)

@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     airfare_model_dir: Path = PROJECT_ROOT / "models"
     airfare_sample_dir: Path = PROJECT_ROOT / "data" / "sample"
     airfare_airports_cache: Path = PROJECT_ROOT / "data" / "airports_full.csv"
+    airfare_seed_dir: Path = PROJECT_ROOT / "data" / "observations"  # CSV partitions
 
     # Scoring weights (USD-equivalent penalties)
     score_stop_penalty_usd: float = 35.0

@@ -28,6 +28,7 @@ def env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("SERPAPI_API_KEY", "")
     monkeypatch.setenv("TWELVEDATA_API_KEY", "")
     monkeypatch.setenv("AIRFARE_AUTOTRAIN_DEMO", "0")
+    monkeypatch.setenv("AIRFARE_SEED_DIR", str(tmp_path / "no-partitions"))
     _reset_caches()
     yield tmp_path
     _reset_caches()
@@ -113,11 +114,9 @@ def test_bootstrap_seeds_history_and_autotrains(env: Path) -> None:
     export_day(SqlitePriceHistory(seed_db), datetime.now(UTC).date(), parts)
     assert list(parts.glob("*.csv"))
 
-    bootstrap.PROJECT_ROOT = env  # partitions live under <root>/data/observations
-    (env / "data").mkdir(exist_ok=True)
-    parts.rename(env / "data" / "observations")
+    os.environ["AIRFARE_SEED_DIR"] = str(parts)
     os.environ["AIRFARE_AUTOTRAIN_DEMO"] = "1"
-    st.cache_resource.clear()
+    _reset_caches()
     store = bootstrap.history()
     assert not store.routes().empty
 
