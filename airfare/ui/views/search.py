@@ -181,8 +181,7 @@ def _render_results(result: SearchResult) -> None:
 
     f1, f2, f3 = st.columns([2.2, 1.8, 1], vertical_alignment="bottom")
     sort = (
-        f1.segmented_control("Sort", SORTS, default="Best", label_visibility="collapsed")
-        or "Best"
+        f1.segmented_control("Sort", SORTS, default="Best", label_visibility="collapsed") or "Best"
     )
     airline_opts = sorted({o.airline_display for o in result.offers})
     airlines = f2.multiselect(
