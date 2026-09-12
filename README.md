@@ -1,142 +1,131 @@
-Airfare Marketplace
-A modular airfare intelligence engine with historical storage, FX normalization, and ML-driven price forecasting.
-This project demonstrates production-style architecture across:
-Provider abstraction & external API integration
-Canonical domain modeling
-Deterministic deduplication
-Historical data persistence
-FX normalization with caching
-ML inference integration
-Clean separation of UI, business logic, and infrastructure
-The goal is not just to search flights — but to design a scalable airfare intelligence system.
+# Airfare Marketplace
 
-Problem
-Modern airfare platforms:
-Obscure historical pricing behavior
-Personalize results without transparency
-Provide no predictive guidance
-Mix currency representations
-Lack architectural modularity
-This project explores how a transparent airfare engine can be built with:
-Clear domain contracts
-Interchangeable providers
-Historical data persistence
-Currency normalization
-Leakage-safe ML integration
-Extensible system boundaries
+[![CI](https://github.com/jfontanet5/airfare_marketplace/actions/workflows/ci.yml/badge.svg)](https://github.com/jfontanet5/airfare_marketplace/actions/workflows/ci.yml)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
+![Ruff](https://img.shields.io/badge/lint-ruff-informational)
+![mypy strict](https://img.shields.io/badge/types-mypy%20strict-informational)
 
-System Architecture
-airfare_marketplace/
-│
-├── src/
-│ ├── streamlit_app.py # UI layer
-│ ├── core/
-│ │ ├── models.py # Canonical Offer → Itinerary → Segment model
-│ │ └── scoring.py # Recommendation scoring engine
-│ │
-│ ├── providers/
-│ │ ├── base.py
-│ │ ├── mock_provider.py
-│ │ ├── csv_provider.py
-│ │ └── amadeus_provider.py # Live OAuth2 integration
-│ │
-│ ├── services/
-│ │ ├── amadeus_client.py # OAuth2 + API client
-│ │ └── fx_rate_services.py # Daily FX conversion (EUR → USD)
-│ │
-│ ├── sqlite_history_store.py # Historical storage layer
-│ ├── data_access.py
-│ └── ml_price_model.py # ML inference utilities
-│
-├── data/
-│ └── price_history.sqlite # Historical observations (local)
-│
-├── models/
-│ └── price_drop_model.pkl # Serialized ML model
-│
-├── notebooks/ # ML experimentation
-└── requirements.txt
+A transparent airfare intelligence engine: provider-agnostic flight search, deterministic
+itinerary identity, USD-normalized price history, and a calibrated price-drop signal —
+built to show how a production airfare system is structured, not just how to call an API.
 
-Canonical Domain Model
-Offer
-├── origin / destination
-├── departure_date / return_date
-├── airline summary
-├── price + currency
-├── offer_signature (deterministic)
-└── itineraries[]
-└── segments[]
+Runs fully offline out of the box. Add Amadeus keys for live fares.
 
-Each segment includes:
-origin / destination
-departure / arrival timestamps
-carrier codes
-flight number
-aircraft code
-This normalized structure enables:
-Deterministic itinerary-level deduplication
-Stable offer_signature
-Clean UI rendering
-ML-ready feature extraction
-Storage abstraction
+## Why
 
-Providers
-The system supports interchangeable providers:
-1️⃣ MockProvider
-Offline deterministic provider for testing.
-2️⃣ CSVProvider
-Local reproducible dataset provider.
-3️⃣ AmadeusProvider (Live)
-OAuth2 Client Credentials flow
-Token caching
-Flexible date expansion (±3 days)
-Post-filtering for stop constraints
-Itinerary-level deduplication
-Stable itinerary signatures
-All providers return normalized Offer objects.
+Consumer fare sites obscure how a price got to where it is: results are personalised,
+currencies are mixed, history is invisible, and "buy now" nudges have no stated basis.
+This project builds the pieces needed to answer *is this a good price for this route,
+right now?* with data the user can inspect:
 
-Machine Learning
-The ML module predicts the probability of a fare dropping within the next 7 days.
-Current implementation:
-Synthetic training dataset generator
-Random Forest classifier
-Real-time inference helper
-UI integration for buy vs wait suggestion
-Planned upgrade:
-Train on real collected historical fare data
+| Problem | Design response |
+| --- | --- |
+| Every source returns a different shape | Canonical `Offer → Itinerary → Segment` model; providers are translated at one boundary |
+| Same flight appears many times | Deterministic `signature` hashed from the segment chain; dedup keeps the cheapest |
+| Prices quoted in mixed currencies | `Price(amount, currency, usd, fx_rate, fx_as_of)` normalized once per search-day; never silently mislabeled |
+| No memory of past prices | Every search writes observations to a versioned SQLite store; trends and route percentiles come from it |
+| "Buy or wait" is a black box | Scoring is a USD-equivalent cost with human-readable reasons; the ML signal ships with a model card |
 
-Key Engineering Decisions
-Decoupled provider abstraction enables future integration with additional APIs or scraping pipelines without modifying UI logic.
-Token handling is centralized in amadeus_client.py.
-Flexible-date search is implemented as controlled multi-call expansion.
-Raw API payloads are intentionally removed from UI rendering to prevent data leakage and maintain clarity.
-.env secrets are excluded from version control.
+## Architecture
 
-Running Locally
+```
+airfare/
+├── config.py            pydantic-settings; every credential optional
+├── domain/              models, signature (identity + dedup), scoring
+├── providers/           base contract + error taxonomy, registry
+│   ├── mock.py          deterministic offline provider (segments, layovers, EUR/USD mix, duplicates)
+│   ├── replay.py        replays the last stored snapshot for a route
+│   └── amadeus/         client (OAuth2, retry/backoff, typed errors) · parser (pure) · provider
+├── services/
+│   ├── normalization.py the one place raw offers become canonical offers
+│   ├── fx.py            daily FX to USD; Twelve Data → Frankfurter/ECB fallback; SQLite cache
+│   ├── airports.py      bundled commercial airports + optional full OurAirports refresh
+│   └── search.py        SearchService: provider → normalize → score → persist → SearchResult
+├── storage/             PriceHistoryRepository protocol + SQLite impl with versioned migrations
+├── ml/                  features (shared by train + inference), synthetic data, train, registry, predict
+└── ui/                  Streamlit app (thin: calls SearchService only)
+```
+
+Data flow for one search:
+
+```
+SearchQuery ─▶ Provider.search() ─▶ [raw Offer, priced in provider currency]
+           ─▶ normalize_offers()   FX → USD · signature · constraints · dedup
+           ─▶ score_offers()       fare + stop/date/duration penalties, with reasons
+           ─▶ history.record()     top-N observations (signature, search_ts) unique
+           ─▶ SearchResult         offers · ranked · recommended · cheapest · warnings
+```
+
+Key decisions (ADR-style):
+
+* **Normalize at the boundary, once.** Earlier versions carried native amounts in a field
+  named `total_price_usd` and converted in three places. Now `Price.usd` is either a real
+  USD figure with the rate and date that produced it, or `None` — and every consumer handles
+  `None` instead of guessing.
+* **Identity is a hash of the segment chain**, not a provider ID. The same physical flight
+  plan from two providers, or on two days, maps to one signature, which is what makes
+  per-itinerary price history possible.
+* **Providers return raw offers and raise typed errors.** `ProviderAuthError`,
+  `ProviderRateLimitedError`, `ProviderUnavailableError` let the UI say something useful;
+  transient failures are retried with jittered backoff inside the client.
+* **Storage is a protocol.** `SqlitePriceHistory` is the default and migrates the pre-0.5
+  schema in place; a Postgres implementation would slot in without touching services.
+* **Features are defined once.** `ml/features.py` builds the same row for training and
+  inference, so the encoder can never see names at train time and codes at predict time.
+
+## Quick start
+
+```bash
 git clone https://github.com/jfontanet5/airfare_marketplace.git
 cd airfare_marketplace
+make install        # Python 3.12 venv + editable install with dev extras
+make train          # trains the demo price-drop model into models/
+make run            # http://localhost:8501 — offline demo data works immediately
+```
 
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+Or with Docker: `make docker-build && make docker-run`.
 
-streamlit run src/streamlit_app.py
+### Live fares
 
-Enabling Live API
-Create a .env file in the project root:
-AMADEUS_ENV=test
-AMADEUS_CLIENT_ID=your_api_key
-AMADEUS_CLIENT_SECRET=your_api_secret
-If credentials are not configured, the app can still run using Mock or CSV providers.
+Copy `.env.example` to `.env` and set `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET`
+(free at [developers.amadeus.com](https://developers.amadeus.com); the `test` environment
+returns a limited route set). `TWELVEDATA_API_KEY` is optional — without it, FX comes
+from the keyless Frankfurter (ECB) API.
 
-Roadmap
-Persist live searches into structured historical storage
-Replace synthetic ML data with real collected fare data
-Introduce caching layer for live API calls
-Expand multi-region request simulation
-Containerize deployment
-Add model retraining pipeline
+### Development
 
-Author
-Julio Fontanet
-Data Scientist
+```bash
+make check          # ruff (lint + format), mypy --strict, pytest with coverage
+make fmt            # auto-format and fix imports
+```
+
+CI runs the same `check` target plus a Docker build on every push and pull request.
+
+## Machine learning
+
+The app shows *chance of a ≥5% drop within 7 days* for each fare.
+
+**Current model — synthetic demo.** `airfare/ml/synthetic.py` documents a simple
+generating process (a latent floor fare with a markup that grows with days-to-departure and
+carrier). The model is a calibrated `HistGradientBoostingClassifier` trained with a
+**time-based split** and saved with a model card (`models/price_drop/card.json`) that records
+data source, row counts, features, and validation metrics. The UI labels it as a
+synthetic-data demo. Its metrics describe that synthetic process, not real markets.
+
+**Path to a real model.** Every search already writes observations keyed by itinerary
+signature. The next step is a scheduled collector that snapshots a watch-list of routes
+daily; `ml/train.py` then swaps `make_synthetic_training_data` for a dataset built from
+observations (label = future 7-day minimum vs. current price per signature) with the same
+features, split, calibration, and card. Until then a non-ML **price position** badge
+(low / typical / high vs. the route's observed p25–p75) works as soon as any history exists.
+
+## Roadmap
+
+- [ ] Scheduled route collector (`airfare.collect`) and observation-based dataset builder
+- [ ] Response cache for live searches (schema table already exists)
+- [ ] Route-trend and model-card pages in the UI
+- [ ] Deploy the offline demo to Streamlit Community Cloud
+
+## Author
+
+Julio Fontanet — Data Scientist · [github.com/jfontanet5](https://github.com/jfontanet5)

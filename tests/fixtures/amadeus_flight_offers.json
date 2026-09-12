@@ -1,0 +1,51 @@
+{
+  "data": [
+    {
+      "type": "flight-offer",
+      "id": "1",
+      "validatingAirlineCodes": ["B6"],
+      "price": {"currency": "EUR", "total": "251.30", "grandTotal": "251.30"},
+      "itineraries": [
+        {
+          "duration": "PT3H45M",
+          "segments": [
+            {"departure": {"iataCode": "SJU", "at": "2026-10-01T07:00:00"},
+             "arrival": {"iataCode": "JFK", "at": "2026-10-01T10:45:00"},
+             "carrierCode": "B6", "number": "704", "aircraft": {"code": "320"},
+             "operating": {"carrierCode": "B6"}, "duration": "PT3H45M"}
+          ]
+        },
+        {
+          "duration": "PT7H10M",
+          "segments": [
+            {"departure": {"iataCode": "JFK", "at": "2026-10-05T14:00:00"},
+             "arrival": {"iataCode": "MCO", "at": "2026-10-05T16:50:00"},
+             "carrierCode": "B6", "number": "1155", "aircraft": {"code": "320"}},
+            {"departure": {"iataCode": "MCO", "at": "2026-10-05T18:30:00"},
+             "arrival": {"iataCode": "SJU", "at": "2026-10-05T21:10:00"},
+             "carrierCode": "B6", "number": "1289", "aircraft": {"code": "321"}}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "flight-offer",
+      "id": "2",
+      "price": {"currency": "EUR", "total": "310.00"},
+      "itineraries": [
+        {
+          "duration": "PT6H05M",
+          "segments": [
+            {"departure": {"iataCode": "SJU", "at": "2026-10-01T09:15:00"},
+             "arrival": {"iataCode": "MIA", "at": "2026-10-01T11:55:00"},
+             "carrierCode": "AA", "number": "1092", "aircraft": {"code": "738"}},
+            {"departure": {"iataCode": "MIA", "at": "2026-10-01T13:20:00"},
+             "arrival": {"iataCode": "JFK", "at": "2026-10-01T16:20:00"},
+             "carrierCode": "AA", "number": "2417", "aircraft": {"code": "321"}}
+          ]
+        }
+      ]
+    }
+  ],
+  "dictionaries": {"carriers": {"B6": "JETBLUE AIRWAYS", "AA": "AMERICAN AIRLINES"}}
+}

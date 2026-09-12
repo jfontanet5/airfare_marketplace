@@ -1,25 +1,31 @@
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-*.so
+*.egg-info/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Virtual environments
+# Environments
 .venv/
 venv/
-env/
+.env
 
 # Jupyter
 .ipynb_checkpoints/
 
-# macOS
+# OS / editors
 .DS_Store
+.vscode/
+.idea/
 
-# Environment variables (secrets)
-.env
-
-# Data (local only)
-data/
-data/price_history.sqlite
-
+# Local data and trained models (regenerate with `make train`)
+data/*.sqlite
+data/*.sqlite-*
+data/airports_full.csv
+models/
+!data/sample/
