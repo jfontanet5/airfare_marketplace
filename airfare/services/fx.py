@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from contextlib import closing
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Protocol
@@ -111,7 +112,7 @@ class FxService:
     def _cache_get(self, pair: str, day: str) -> float | None:
         if (pair, day) in self._mem:
             return self._mem[(pair, day)]
-        with self._connect() as conn:
+        with closing(self._connect()) as conn:
             row = conn.execute(
                 "SELECT rate FROM fx_rates_daily WHERE pair=? AND day_utc=?", (pair, day)
             ).fetchone()
@@ -122,7 +123,7 @@ class FxService:
 
     def _cache_put(self, pair: str, day: str, rate: float, source: str) -> None:
         self._mem[(pair, day)] = rate
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 "INSERT OR REPLACE INTO fx_rates_daily VALUES (?,?,?,?,?)",
                 (pair, day, rate, source, datetime.now(UTC).isoformat()),
