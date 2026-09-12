@@ -11,37 +11,65 @@ import streamlit as st
 from airfare.domain.models import Itinerary, ScoredOffer
 from airfare.ui import format as fmt
 
-CSS = """
+TEAL = "#1A7F8E"
+TEAL_DARK = "#146673"
+GOLD = "#F2B233"
+GOLD_SOFT = "#FBEBC2"
+INK = "#23272B"
+SLATE = "#6B7280"
+LINE = "#E4E8EC"
+
+CSS = f"""
 <style>
-  .block-container { padding-top: 1.6rem; padding-bottom: 3rem; max-width: 1180px; }
-  h1 { letter-spacing: -0.02em; }
-  .afm-eyebrow { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; opacity: .65; }
-  .afm-price { font-size: 1.75rem; font-weight: 700; line-height: 1.1; }
-  .afm-muted { opacity: .7; font-size: .85rem; }
-  .afm-chip { display: inline-block; padding: .12rem .55rem; border-radius: 999px; font-size: .74rem;
-              font-weight: 600; margin-right: .3rem; border: 1px solid transparent; }
-  .afm-chip.rec  { background: rgba(15,98,254,.12); color: #0F62FE; }
-  .afm-chip.low  { background: rgba(16,185,129,.14); color: #047857; }
-  .afm-chip.typical { background: rgba(107,114,128,.14); color: #374151; }
-  .afm-chip.high { background: rgba(245,158,11,.16); color: #92400E; }
-  .afm-chip.warn { background: rgba(245,158,11,.16); color: #92400E; }
-  .afm-chip.demo { background: rgba(139,92,246,.14); color: #5B21B6; }
-  .afm-chip.live { background: rgba(16,185,129,.14); color: #047857; }
-  .afm-seg { font-variant-numeric: tabular-nums; }
-  div[data-testid="stMetric"] { padding: .4rem .6rem; border-radius: 10px; }
-  @media (prefers-color-scheme: dark) {
-    .afm-chip.typical { color: #D1D5DB; }
-    .afm-chip.low { color: #6EE7B7; }
-    .afm-chip.high, .afm-chip.warn { color: #FCD34D; }
-    .afm-chip.demo { color: #C4B5FD; }
-    .afm-chip.rec { color: #93C5FD; }
-  }
+  .block-container {{ padding-top: 1.2rem; padding-bottom: 4rem; max-width: 1180px; }}
+  h1, h2, h3 {{ letter-spacing: -0.02em; color: {INK}; }}
+  h1 {{ font-weight: 900; }}
+  .afm-hero {{ display: flex; align-items: center; gap: 2rem; padding: 1.2rem 0 1.6rem 0; }}
+  .afm-hero h1 {{ font-size: 2.6rem; line-height: 1.05; margin: 0 0 .6rem 0; }}
+  .afm-hero p {{ font-size: 1.05rem; color: {SLATE}; max-width: 34rem; margin: 0; }}
+  .afm-hero .afm-hex {{ margin-left: auto; flex: 0 0 auto; }}
+  .afm-eyebrow {{ font-size: .76rem; text-transform: uppercase; letter-spacing: .1em; color: {TEAL}; font-weight: 700; }}
+  .afm-price {{ font-size: 1.8rem; font-weight: 900; line-height: 1.1; color: {INK}; }}
+  .afm-muted {{ color: {SLATE}; font-size: .86rem; }}
+  .afm-chip {{ display: inline-block; padding: .14rem .6rem; border-radius: 999px; font-size: .72rem;
+              font-weight: 700; margin-right: .3rem; letter-spacing: .01em; }}
+  .afm-chip.rec     {{ background: {TEAL}; color: #fff; }}
+  .afm-chip.live    {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
+  .afm-chip.low     {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
+  .afm-chip.typical {{ background: #EEF1F4; color: #4B5563; }}
+  .afm-chip.high    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
+  .afm-chip.warn    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
+  .afm-chip.demo    {{ background: {GOLD_SOFT}; color: #8A5A00; }}
+  .afm-chip.model   {{ background: rgba(26,127,142,.12); color: {TEAL_DARK}; }}
+  .afm-seg {{ font-variant-numeric: tabular-nums; }}
+  div[data-testid="stMetric"] {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: .8rem; padding: .7rem .9rem; }}
+  div[data-testid="stMetricLabel"] {{ color: {SLATE}; }}
+  div[data-testid="stMetricValue"] {{ font-weight: 900; }}
+  section[data-testid="stSidebar"] .afm-brand {{ font-weight: 900; font-size: 1.15rem; letter-spacing: -0.02em; }}
+  .afm-hexrow {{ display:flex; gap:.35rem; margin:.4rem 0 .8rem 0; }}
 </style>
+"""
+
+HEX_MARK = f"""
+<svg width="190" height="170" viewBox="0 0 190 170" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <polygon points="60,4 108,4 132,46 108,88 60,88 36,46" fill="{GOLD}" opacity=".95"/>
+  <polygon points="112,50 160,50 184,92 160,134 112,134 88,92" fill="{TEAL}" opacity=".9"/>
+  <polygon points="36,90 84,90 108,132 84,174 36,174 12,132" fill="{GOLD_SOFT}"/>
+  <polygon points="8,20 34,20 47,42 34,64 8,64 -5,42" fill="rgba(26,127,142,.18)"/>
+</svg>
 """
 
 
 def inject_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
+
+
+def hero(title: str, lead: str) -> None:
+    st.markdown(
+        f"<div class='afm-hero'><div><h1>{title}</h1><p>{lead}</p></div>"
+        f"<div class='afm-hex'>{HEX_MARK}</div></div>",
+        unsafe_allow_html=True,
+    )
 
 
 def chip(text: str, kind: str = "typical") -> str:
@@ -180,7 +208,7 @@ def trend_chart(trend: pd.DataFrame, height: int = 260) -> alt.Chart | None:
             color=alt.Color(
                 "series:N",
                 title=None,
-                scale=alt.Scale(range=["#0F62FE", "#9CA3AF", "#10B981"]),
+                scale=alt.Scale(range=[TEAL, "#B8C0C8", GOLD]),
                 legend=alt.Legend(orient="top"),
             ),
             tooltip=[
@@ -201,7 +229,7 @@ def fare_calendar_chart(by_departure: pd.DataFrame, height: int = 220) -> alt.Ch
     df["departure_date"] = pd.to_datetime(df["departure_date"])
     return (
         alt.Chart(df)
-        .mark_bar(color="#0F62FE", size=14, cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+        .mark_bar(color=TEAL, size=14, cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
         .encode(
             x=alt.X("departure_date:T", title="Departure date", axis=alt.Axis(format="%b %d")),
             y=alt.Y("min_price_usd:Q", title="Cheapest observed (USD)"),
@@ -221,7 +249,7 @@ def price_histogram(
     df = pd.DataFrame({"usd": prices})
     base = (
         alt.Chart(df)
-        .mark_bar(color="#9CA3AF", opacity=0.8)
+        .mark_bar(color="#B8C0C8", opacity=0.9)
         .encode(
             x=alt.X("usd:Q", bin=alt.Bin(maxbins=25), title="Observed fare (USD)"),
             y=alt.Y("count()", title="Observations"),
@@ -232,7 +260,7 @@ def price_histogram(
         return base
     rule = (
         alt.Chart(pd.DataFrame({"usd": [current]}))
-        .mark_rule(color="#0F62FE", strokeWidth=2)
+        .mark_rule(color=TEAL, strokeWidth=2)
         .encode(x="usd:Q")
     )
     return base + rule

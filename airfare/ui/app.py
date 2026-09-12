@@ -23,7 +23,7 @@ bootstrap.configure_logging()
 ui.inject_css()
 
 with st.sidebar:
-    st.markdown("### ✈️ Airfare Marketplace")
+    st.markdown("<div class='afm-brand'>✈ Airfare Marketplace</div>", unsafe_allow_html=True)
     settings = bootstrap.settings()
     st.caption(
         "Live search: " + ("on (SerpApi)" if settings.live_configured else "off — demo & replay")

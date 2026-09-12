@@ -1,10 +1,38 @@
 [theme]
 base = "light"
-primaryColor = "#0F62FE"
+primaryColor = "#1A7F8E"          # teal — the one action color
 backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F4F6FA"
-textColor = "#161B22"
-font = "sans serif"
+secondaryBackgroundColor = "#F6F8F9"
+textColor = "#23272B"
+linkColor = "#1A7F8E"
+borderColor = "#E4E8EC"
+baseRadius = "0.6rem"
+buttonRadius = "0.6rem"
+showWidgetBorder = true
+showSidebarBorder = true
+font = "Lato, sans-serif"
+headingFont = "Lato, sans-serif"
+codeFont = "JetBrains Mono, monospace"
+codeBackgroundColor = "#F6F8F9"
+
+[[theme.fontFaces]]
+family = "Lato"
+url = "https://fonts.gstatic.com/s/lato/v24/S6uyw4BMUTPHjx4wXiWtFCc.woff2"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Lato"
+url = "https://fonts.gstatic.com/s/lato/v24/S6u9w4BMUTPHh6UVSwiPGQ3q5d0.woff2"
+weight = 700
+
+[[theme.fontFaces]]
+family = "Lato"
+url = "https://fonts.gstatic.com/s/lato/v24/S6u9w4BMUTPHh50XSwiPGQ3q5d0.woff2"
+weight = 900
+
+[theme.sidebar]
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F8F9"
 
 [server]
 headless = true

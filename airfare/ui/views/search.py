@@ -30,7 +30,7 @@ def _search_form(providers: list[ProviderName]) -> tuple[bool, dict[str, object]
     labels = {a.label: a.iata for a in airport_list}
     today = date.today()
     with st.form("search", border=True):
-        c1, c2, c3 = st.columns([1.5, 1.5, 1])
+        c1, c2, c3 = st.columns([1.5, 1.5, 1.15])
         origin = c1.selectbox("From", list(labels), index=None, placeholder="City, airport or code")
         dest = c2.selectbox("To", list(labels), index=None, placeholder="City, airport or code")
         trip = c3.radio("Trip", ["Round trip", "One way"], horizontal=True)
@@ -169,7 +169,7 @@ def _render_results(result: SearchResult) -> None:
     k2.metric("Cheapest", fmt.usd(cheapest.price.usd) if cheapest else "—")
     k3.metric("Median", fmt.usd(float(pd.Series(priced).median())) if priced else "—")
     if rec and predictor and rec.offer.price.usd is not None:
-        k4.metric("Drop chance · recommended", f"{predictor.probability(rec.offer):.0%}")
+        k4.metric("Drop chance (best)", f"{predictor.probability(rec.offer):.0%}")
         k4.caption(
             "synthetic-data demo model"
             if predictor.card.is_synthetic
@@ -235,10 +235,10 @@ def render() -> None:
         if settings.live_configured
         else ui.chip("offline mode", "typical")
     )
-    ui.page_header(
-        "Airfare Marketplace",
-        "Transparent fares: one price basis, visible history, an honest signal.",
-        [status],
+    ui.hero(
+        "Know when a fare is<br>actually a good fare.",
+        "Live and demo airfares on one price basis, with the route's history and a calibrated "
+        "chance of a drop, so the decision to book is yours, with the evidence in view. " + status,
     )
 
     submitted, form = _search_form(providers)

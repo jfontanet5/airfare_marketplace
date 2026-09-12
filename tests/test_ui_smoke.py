@@ -51,7 +51,7 @@ def _seed_history(db: Path) -> None:
 def test_search_page_end_to_end(env: Path) -> None:
     at = AppTest.from_file(str(APP), default_timeout=60).run()
     assert not at.exception
-    assert at.title[0].value.endswith("Airfare Marketplace")
+    assert any("Know when a fare" in md.value for md in at.markdown)
 
     labels = at.selectbox[0].options
     at.selectbox[0].select(next(o for o in labels if o.startswith("SJU")))
