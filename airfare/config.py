@@ -19,10 +19,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Amadeus Self-Service
-    amadeus_env: str = Field(default="test", description="'test' or 'production'")
-    amadeus_client_id: str = ""
-    amadeus_client_secret: str = ""
+    # SerpApi (Google Flights engine)
+    serpapi_api_key: str = ""
+    serpapi_currency: str = "USD"
+    serpapi_return_legs_top_n: int = Field(
+        default=0,
+        description="Round trips: fetch the return leg for the N cheapest outbound options",
+    )
 
     # FX
     twelvedata_api_key: str = ""
@@ -44,8 +47,8 @@ class Settings(BaseSettings):
     search_cache_ttl_seconds: int = 900
 
     @property
-    def amadeus_configured(self) -> bool:
-        return bool(self.amadeus_client_id and self.amadeus_client_secret)
+    def live_configured(self) -> bool:
+        return bool(self.serpapi_api_key)
 
 
 @lru_cache(maxsize=1)

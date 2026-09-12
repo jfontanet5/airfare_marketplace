@@ -15,8 +15,7 @@ APP = Path(__file__).parent.parent / "airfare" / "ui" / "app.py"
 def app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> AppTest:
     monkeypatch.setenv("AIRFARE_DB_PATH", str(tmp_path / "h.sqlite"))
     monkeypatch.setenv("AIRFARE_MODEL_DIR", str(tmp_path / "models"))
-    monkeypatch.setenv("AMADEUS_CLIENT_ID", "")
-    monkeypatch.setenv("AMADEUS_CLIENT_SECRET", "")
+    monkeypatch.setenv("SERPAPI_API_KEY", "")
     monkeypatch.setenv("TWELVEDATA_API_KEY", "")
     get_settings.cache_clear()
     return AppTest.from_file(str(APP), default_timeout=60)

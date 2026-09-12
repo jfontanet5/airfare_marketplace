@@ -9,7 +9,7 @@ A transparent airfare intelligence engine: provider-agnostic flight search, dete
 itinerary identity, USD-normalized price history, and a calibrated price-drop signal —
 built to show how a production airfare system is structured, not just how to call an API.
 
-Runs fully offline out of the box. Add Amadeus keys for live fares.
+Runs fully offline out of the box. Add a SerpApi key for live Google Flights fares.
 
 ## Why
 
@@ -35,7 +35,7 @@ airfare/
 ├── providers/           base contract + error taxonomy, registry
 │   ├── mock.py          deterministic offline provider (segments, layovers, EUR/USD mix, duplicates)
 │   ├── replay.py        replays the last stored snapshot for a route
-│   └── amadeus/         client (OAuth2, retry/backoff, typed errors) · parser (pure) · provider
+│   └── serpapi/         client (retry/backoff, typed errors) · parser (pure) · provider (Google Flights)
 ├── services/
 │   ├── normalization.py the one place raw offers become canonical offers
 │   ├── fx.py            daily FX to USD; Twelve Data → Frankfurter/ECB fallback; SQLite cache
@@ -68,6 +68,11 @@ Key decisions (ADR-style):
 * **Providers return raw offers and raise typed errors.** `ProviderAuthError`,
   `ProviderRateLimitedError`, `ProviderUnavailableError` let the UI say something useful;
   transient failures are retried with jittered backoff inside the client.
+* **The live provider has already been swapped once.** The first live integration was the
+  Amadeus Self-Service API (OAuth2, EUR-priced test data). Amadeus decommissioned that
+  program in July 2026; replacing it with SerpApi's Google Flights engine touched one
+  provider package and the registry — nothing in domain, services, storage, ML, or UI.
+  Observations collected under Amadeus remain in the history store, tagged by provider.
 * **Storage is a protocol.** `SqlitePriceHistory` is the default and migrates the pre-0.5
   schema in place; a Postgres implementation would slot in without touching services.
 * **Features are defined once.** `ml/features.py` builds the same row for training and
@@ -87,10 +92,13 @@ Or with Docker: `make docker-build && make docker-run`.
 
 ### Live fares
 
-Copy `.env.example` to `.env` and set `AMADEUS_CLIENT_ID` / `AMADEUS_CLIENT_SECRET`
-(free at [developers.amadeus.com](https://developers.amadeus.com); the `test` environment
-returns a limited route set). `TWELVEDATA_API_KEY` is optional — without it, FX comes
-from the keyless Frankfurter (ECB) API.
+Copy `.env.example` to `.env` and set `SERPAPI_API_KEY` (sign up at
+[serpapi.com](https://serpapi.com); the free plan includes a small monthly search quota).
+Each search costs one request. For round trips, Google prices the whole trip on the
+outbound leg; set `SERPAPI_RETURN_LEGS_TOP_N=3` to also fetch the matching return
+itinerary for the three cheapest options (one extra request each), or leave it at `0`
+to keep every search to a single request. `TWELVEDATA_API_KEY` is optional — without
+it, FX comes from the keyless Frankfurter (ECB) API.
 
 ### Development
 

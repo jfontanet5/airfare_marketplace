@@ -1,0 +1,48 @@
+{
+  "search_metadata": {"id": "abc", "status": "Success"},
+  "search_parameters": {"engine": "google_flights", "departure_id": "SJU", "arrival_id": "JFK",
+    "outbound_date": "2026-10-01", "return_date": "2026-10-05", "type": "1", "currency": "USD"},
+  "best_flights": [
+    {
+      "flights": [
+        {"departure_airport": {"name": "Luis Muñoz Marín International Airport", "id": "SJU", "time": "2026-10-01 07:00"},
+         "arrival_airport": {"name": "John F. Kennedy International Airport", "id": "JFK", "time": "2026-10-01 10:45"},
+         "duration": 225, "airplane": "Airbus A320", "airline": "JetBlue", "airline_logo": "https://x/B6.png",
+         "travel_class": "Economy", "flight_number": "B6 704", "legroom": "32 in"}
+      ],
+      "total_duration": 225,
+      "carbon_emissions": {"this_flight": 180000},
+      "price": 312,
+      "type": "Round trip",
+      "airline_logo": "https://x/B6.png",
+      "departure_token": "TOKEN_B6"
+    }
+  ],
+  "other_flights": [
+    {
+      "flights": [
+        {"departure_airport": {"name": "SJU", "id": "SJU", "time": "2026-10-01 09:15"},
+         "arrival_airport": {"name": "MIA", "id": "MIA", "time": "2026-10-01 11:55"},
+         "duration": 160, "airplane": "Boeing 737", "airline": "American", "flight_number": "AA 1092"},
+        {"departure_airport": {"name": "MIA", "id": "MIA", "time": "2026-10-01 13:20"},
+         "arrival_airport": {"name": "JFK", "id": "JFK", "time": "2026-10-01 16:20"},
+         "duration": 180, "airplane": "Airbus A321", "airline": "American", "flight_number": "AA 2417"}
+      ],
+      "layovers": [{"duration": 85, "name": "Miami International Airport", "id": "MIA"}],
+      "total_duration": 425,
+      "price": 298,
+      "type": "Round trip",
+      "departure_token": "TOKEN_AA"
+    },
+    {
+      "flights": [
+        {"departure_airport": {"id": "SJU", "time": "2026-10-01 23:55"},
+         "arrival_airport": {"id": "JFK", "time": "2026-10-02 03:40"},
+         "duration": 225, "airline": "Spirit", "flight_number": "NK 331"}
+      ],
+      "total_duration": 225,
+      "type": "Round trip"
+    }
+  ],
+  "price_insights": {"lowest_price": 298, "price_level": "typical", "typical_price_range": [260, 380]}
+}

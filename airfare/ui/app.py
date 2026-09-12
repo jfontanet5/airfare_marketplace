@@ -26,7 +26,7 @@ STOP_OPTIONS = {"Nonstop only": 0, "Up to 1 stop": 1, "Up to 2 stops": 2}
 PROVIDER_LABELS = {
     ProviderName.MOCK: "Demo data (offline)",
     ProviderName.REPLAY: "Replay last stored search",
-    ProviderName.AMADEUS: "Amadeus (live)",
+    ProviderName.SERPAPI: "Google Flights via SerpApi (live)",
 }
 
 st.markdown(
@@ -53,7 +53,7 @@ st.caption("Provider-agnostic search · USD-normalized history · price-drop sig
 providers = available_providers(settings)
 with st.form("search", border=True):
     c1, c2, c3 = st.columns([1.4, 1.4, 1])
-    airport_list = bootstrap.airports(include_full=ProviderName.AMADEUS in providers)
+    airport_list = bootstrap.airports(include_full=ProviderName.SERPAPI in providers)
     labels = {a.label: a.iata for a in airport_list}
     with c1:
         origin_label = st.selectbox(
@@ -132,6 +132,11 @@ def _offer_card(
                 _itinerary_block("Outbound", o.outbound)
             if o.inbound:
                 _itinerary_block("Return", o.inbound)
+            elif o.return_date:
+                st.markdown(
+                    f"<span class='afm-muted'>Return {o.return_date:%b %d}: leg chosen at booking · price is the round-trip total</span>",
+                    unsafe_allow_html=True,
+                )
         with right:
             st.markdown(f"<div class='afm-price'>{fmt.money(o)}</div>", unsafe_allow_html=True)
             if o.price.currency != "USD" and o.price.usd is not None:
@@ -314,6 +319,6 @@ if "result" in st.session_state:
 else:
     st.markdown(
         "<div class='afm-muted'>Pick a route to begin. Demo data works fully offline; "
-        "add Amadeus keys to <code>.env</code> for live fares.</div>",
+        "add a SerpApi key to <code>.env</code> for live Google Flights fares.</div>",
         unsafe_allow_html=True,
     )
