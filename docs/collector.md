@@ -13,6 +13,15 @@ Every route × horizon is one provider request, and `--max-requests` (default 20
 stop, so a misconfigured schedule cannot drain the SerpApi quota. Horizons default to
 14, 30 and 60 days out with a 7-day round trip; `--trip-length 0` collects one-way fares.
 
+## Why departures are snapped to a weekday
+
+The price-drop label asks whether *the same itinerary* got cheaper within the next
+7 days, so each itinerary has to be observed more than once. A rolling horizon
+(`today + 30`) searches a different departure date every day and never re-observes
+anything; three weeks of that produce zero labeled rows. `--snap-weekday 3` moves each
+departure to the next Thursday, so one departure date is searched on seven consecutive
+days before the window rolls to the following week. Cost per day is unchanged.
+
 ## Why CSV partitions
 
 The SQLite file is local and gitignored. `--export` also writes the day's observations to
@@ -23,8 +32,9 @@ persist results without any external database.
 
 ## Scheduling
 
-**GitHub Actions** — `.github/workflows/collect.yml` runs on manual dispatch; uncomment
-the `schedule` block for daily runs. Add `SERPAPI_API_KEY` under *Settings → Secrets and
+**GitHub Actions** — `.github/workflows/collect.yml` runs daily with a second, later
+retry slot that does nothing if the first run already committed the day's partition
+(hosted runners are occasionally not acquired, which fails a scheduled run outright). Add `SERPAPI_API_KEY` under *Settings → Secrets and
 variables → Actions*. Each run imports existing partitions, collects, and commits the new
 partition.
 

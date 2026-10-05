@@ -1,41 +1,89 @@
 name: Collect fares
 
-# Snapshots the watch-list and commits the day's CSV partition. Costs
-# (routes x horizons) SerpApi requests per run: 3 routes x 1 horizon = 3/day,
-# ~90/month. Requires the SERPAPI_API_KEY repo secret. To pause, comment out
-# `schedule` or disable the workflow in the Actions tab.
+# Snapshots the watch-list and commits the day's CSV partition.
+#
+# Cost: routes x horizons SerpApi requests per collecting run (3 x 1 = 3/day).
+# Departures are snapped to the next Thursday, so each departure date is
+# re-observed for a week; that repeat is what the price-drop label needs.
+#
+# Reliability: two scheduled attempts per day. The second one is a no-op if the
+# first already wrote today's partition, so a missed or unscheduled run (GitHub
+# occasionally fails to acquire a hosted runner) self-heals without double-spending.
+# Requires the SERPAPI_API_KEY repo secret. Pause by disabling the workflow in the
+# Actions tab.
 on:
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Collect even if today's partition already exists"
+        type: boolean
+        default: false
   schedule:
-    - cron: "15 11 * * *"   # 11:15 UTC daily (07:15 Puerto Rico)
+    - cron: "15 11 * * *"   # 07:15 Puerto Rico
+    - cron: "15 17 * * *"   # retry slot; skipped when 11:15 succeeded
 
 permissions:
   contents: write
 
+concurrency:
+  group: collect-fares
+  cancel-in-progress: false
+
 jobs:
   collect:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+
+      - name: Skip if today's partition exists
+        id: gate
+        run: |
+          today=$(date -u +%F)
+          if [ -f "data/observations/${today}.csv" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Partition for ${today} already committed; nothing to do."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: "3.12"
           cache: pip
-      - run: pip install .
+
+      - if: steps.gate.outputs.run == 'true'
+        run: pip install .
+
       - name: Rebuild history from committed partitions
+        if: steps.gate.outputs.run == 'true'
         run: airfare-collect import --from data/observations
+
       - name: Snapshot watch-list
+        if: steps.gate.outputs.run == 'true'
         env:
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
-        run: airfare-collect run --watchlist data/sample/watchlist.txt --horizons 30 --max-requests 5 --export
+        run: >-
+          airfare-collect run --watchlist data/sample/watchlist.txt
+          --horizons 30 --snap-weekday 3 --max-requests 5 --export
+
       - name: Commit partition
+        if: steps.gate.outputs.run == 'true'
         run: |
-          if ! ls data/observations/*.csv >/dev/null 2>&1; then
-            echo "::error::no partition was written; see the Snapshot step log"
+          today=$(date -u +%F)
+          if [ ! -f "data/observations/${today}.csv" ]; then
+            echo "::error::no partition was written for ${today}; see the Snapshot step log"
             exit 1
           fi
           git config user.name "fare-collector"
           git config user.email "fare-collector@users.noreply.github.com"
           git add data/observations
-          git diff --cached --quiet || git commit -m "data: fares $(date -u +%F)"
-          git push
+          git diff --cached --quiet && exit 0
+          git commit -m "data: fares ${today}"
+          # main may have moved while we collected; partitions never conflict.
+          for attempt in 1 2 3; do
+            git pull --rebase origin main && git push && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1

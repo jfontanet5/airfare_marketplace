@@ -6,7 +6,13 @@ import pandas as pd
 import pytest
 from airfare.collect.cli import main
 from airfare.collect.partitions import export_day, import_partitions
-from airfare.collect.watchlist import Route, load_watchlist, parse_routes, plan_queries
+from airfare.collect.watchlist import (
+    Route,
+    load_watchlist,
+    parse_routes,
+    plan_queries,
+    snap_to_weekday,
+)
 from airfare.config import get_settings
 from airfare.domain.models import Price, SearchQuery
 from airfare.storage.repository import Observation
@@ -89,3 +95,23 @@ def test_export_uses_utc_day(tmp_path: Path) -> None:
     history.record([Observation.from_offer(o, q, ts)])
     assert export_day(history, date(2026, 9, 12), tmp_path / "out") is not None
     assert export_day(history, date(2026, 9, 12) + timedelta(days=1), tmp_path / "out") is None
+
+
+def test_snap_weekday_reobserves_the_same_departure() -> None:
+    routes = [Route("SJU", "JFK")]
+    start = date(2026, 10, 5)  # Monday
+    deps = {
+        plan_queries(routes, [30], start + timedelta(days=d), 7, snap_weekday=3)[0].departure_date
+        for d in range(7)
+    }
+    assert len(deps) <= 2  # one cohort per week, not one per day
+    assert all(d.weekday() == 3 for d in deps)
+    rolling = {
+        plan_queries(routes, [30], start + timedelta(days=d), 7)[0].departure_date for d in range(7)
+    }
+    assert len(rolling) == 7  # the old behaviour: never the same departure twice
+
+
+def test_snap_to_weekday() -> None:
+    assert snap_to_weekday(date(2026, 10, 8), 3) == date(2026, 10, 8)  # already Thursday
+    assert snap_to_weekday(date(2026, 10, 9), 3) == date(2026, 10, 15)

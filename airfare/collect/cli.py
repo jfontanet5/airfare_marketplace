@@ -45,6 +45,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     run.add_argument("--max-stops", type=int, default=2)
     run.add_argument(
+        "--snap-weekday",
+        type=int,
+        choices=range(7),
+        default=None,
+        metavar="0-6",
+        help="move each departure to the next given weekday (Mon=0) so the same flights are "
+        "re-observed daily; required for price-drop labels",
+    )
+    run.add_argument(
         "--provider", default=ProviderName.SERPAPI.value, choices=[p.value for p in ProviderName]
     )
     run.add_argument("--max-requests", type=int, default=20, help="hard budget per run")
@@ -67,7 +76,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     routes = load_watchlist(args.watchlist) if args.watchlist else parse_routes(args.routes)
     horizons = [int(h) for h in args.horizons.split(",") if h.strip()]
     today = datetime.now(UTC).date()
-    queries = plan_queries(routes, horizons, today, args.trip_length or None, args.max_stops)
+    queries = plan_queries(
+        routes,
+        horizons,
+        today,
+        args.trip_length or None,
+        max_stops=args.max_stops,
+        snap_weekday=args.snap_weekday,
+    )
 
     if len(queries) > args.max_requests:
         log.error(
